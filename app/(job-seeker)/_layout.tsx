@@ -1,23 +1,7 @@
-import { Tabs, Redirect } from 'expo-router';
-import { Home, Briefcase, Map, FileText, User } from 'lucide-react-native';
-import { useAuthStore } from '@/stores/authStore';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Tabs } from 'expo-router';
+import { Home, Briefcase, Map, FileText, User, Bookmark } from 'lucide-react-native';
 
 export default function JobSeekerLayout() {
-  const { isAuthenticated, user, isLoading } = useAuthStore();
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
-      </View>
-    );
-  }
-
-  if (!isAuthenticated || !user) {
-    return <Redirect href="/(auth)" />;
-  }
-
   return (
     <Tabs
       screenOptions={{
@@ -67,6 +51,15 @@ export default function JobSeekerLayout() {
         }}
       />
       <Tabs.Screen
+        name="saved"
+        options={{
+          title: 'Saved',
+          tabBarIcon: ({ color, size }) => (
+            <Bookmark color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="applications"
         options={{
           title: 'Applications',
@@ -87,12 +80,3 @@ export default function JobSeekerLayout() {
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-});

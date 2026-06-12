@@ -1,27 +1,7 @@
-import { Tabs, Redirect } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { LayoutDashboard, Briefcase, Users, Bell, User } from 'lucide-react-native';
-import { useAuthStore } from '@/stores/authStore';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
 export default function EmployerLayout() {
-  const { isAuthenticated, user, isLoading } = useAuthStore();
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#059669" />
-      </View>
-    );
-  }
-
-  if (!isAuthenticated || !user) {
-    return <Redirect href="/(auth)" />;
-  }
-
-  if (user.role !== 'employer') {
-    return <Redirect href="/(auth)" />;
-  }
-
   return (
     <Tabs
       screenOptions={{
@@ -91,12 +71,3 @@ export default function EmployerLayout() {
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-});

@@ -38,6 +38,7 @@ export default function JobDetailsScreen() {
   const [applying, setApplying] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [savedJobId, setSavedJobId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchJob();
@@ -70,7 +71,63 @@ export default function JobDetailsScreen() {
         .update({ view_count: (data.view_count || 0) + 1 })
         .eq('id', id);
     }
+
+    // Check if user has already applied
+    if (jobSeeker) {
+      const { data: appCheck } = await supabase
+        .from('applications')
+        .select('id')
+        .eq('job_id', id)
+        .eq('job_seeker_id', jobSeeker.id)
+        .single();
+
+      if (appCheck) setHasApplied(true);
+
+      // Check if job is saved
+      const { data: savedCheck } = await supabase
+        .from('saved_jobs')
+        .select('id')
+        .eq('job_id', id)
+        .eq('job_seeker_id', jobSeeker.id)
+        .single();
+
+      if (savedCheck) {
+        setIsSaved(true);
+        setSavedJobId(savedCheck.id);
+      }
+    }
+
     setLoading(false);
+  };
+
+  const toggleSave = async () => {
+    if (!jobSeeker) {
+      Alert.alert('Login Required', 'Please login to save jobs', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Login', onPress: () => router.push('/(auth)') },
+      ]);
+      return;
+    }
+
+    if (isSaved && savedJobId) {
+      // Remove from saved
+      const { error } = await supabase.from('saved_jobs').delete().eq('id', savedJobId);
+      if (!error) {
+        setIsSaved(false);
+        setSavedJobId(null);
+      }
+    } else {
+      // Add to saved
+      const { data, error } = await supabase.from('saved_jobs').insert({
+        job_id: id,
+        job_seeker_id: jobSeeker.id,
+      }).select('id').single();
+
+      if (!error && data) {
+        setIsSaved(true);
+        setSavedJobId(data.id);
+      }
+    }
   };
 
   const handleApply = async () => {
@@ -266,7 +323,7 @@ export default function JobDetailsScreen() {
       <View style={styles.bottomActions}>
         <TouchableOpacity
           style={styles.saveButton}
-          onPress={() => setIsSaved(!isSaved)}
+          onPress={toggleSave}
         >
           <Heart color={isSaved ? '#EF4444' : '#64748B'} size={24} fill={isSaved ? '#EF4444' : 'transparent'} />
         </TouchableOpacity>

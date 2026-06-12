@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Stack, Redirect, router } from 'expo-router';
+import { Stack, Redirect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
@@ -9,11 +9,15 @@ import { supabase } from '@/lib/supabase';
 export default function RootLayout() {
   useFrameworkReady();
   const [isReady, setIsReady] = useState(false);
-  const { user, refreshUser, isAuthenticated, isLoading } = useAuthStore();
+  const { refreshUser } = useAuthStore();
 
   useEffect(() => {
     const init = async () => {
-      await refreshUser();
+      try {
+        await refreshUser();
+      } catch (error) {
+        console.log('Auth refresh error:', error);
+      }
       setIsReady(true);
     };
     init();
@@ -34,7 +38,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!isReady || isLoading) {
+  if (!isReady) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#2563EB" />
