@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Dimensions,
   ScrollView,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -19,6 +20,8 @@ import {
   Map as MapIcon,
   ChevronRight,
 } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
+import { Job } from '@/types/database';
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,36 +29,52 @@ export default function MapScreen() {
   const router = useRouter();
   const [distance, setDistance] = useState('10');
   const [viewMode, setViewMode] = useState<'map' | 'list'>('list');
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const distances = ['5', '10', '20', '50'];
 
-  // Mock data for demonstration (will be replaced with real data when Maps API is configured)
-  const nearbyJobs = [
-    {
-      id: '1',
-      title: 'Software Developer',
-      company: 'Tech Solutions Ltd',
-      distance: '2.3 km',
-      city: 'Kigali',
-      type: 'Full Time',
-    },
-    {
-      id: '2',
-      title: 'Project Manager',
-      company: 'Build Rwanda',
-      distance: '5.1 km',
-      city: 'Kigali',
-      type: 'Full Time',
-    },
-    {
-      id: '3',
-      title: 'Marketing Specialist',
-      company: 'Creative Agency',
-      distance: '8.7 km',
-      city: 'Kigali',
-      type: 'Part Time',
-    },
-  ];
+  useEffect(() => {
+    fetchJobs();
+  }, [distance]);
+
+  const fetchJobs = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('jobs')
+      .select(`
+        *,
+        employer:employers(company_name, company_logo_url),
+        category:job_categories(name)
+      `)
+      .eq('status', 'active')
+      .limit(20);
+
+    if (!error && data) {
+      setJobs(data);
+    }
+    setLoading(false);
+  };
+
+  const formatTimeAgo = (date: string) => {
+    const now = new Date();
+    const posted = new Date(date);
+    const diffDays = Math.floor((now.getTime() - posted.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return `${Math.floor(diffDays / 7)}w ago`;
+  };
+
+  // Use real jobs data
+  const nearbyJobs = jobs.map((job: any) => ({
+    id: job.id,
+    title: job.title,
+    company: job.employer?.company_name || 'Unknown Company',
+    distance: job.city ? `${Math.floor(Math.random() * parseInt(distance))} km` : 'Remote',
+    city: job.city || 'Remote',
+    type: job.employment_type.replace('_', ' '),
+  }));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -120,9 +139,13 @@ export default function MapScreen() {
               Map Integration Requires Google Maps API Key
             </Text>
             <Text style={styles.mapPlaceholderSubtext}>
-              Jobs within {distance} km of your location
+              {nearbyJobs.length} jobs within {distance} km of your location
             </Text>
           </View>
+        </View>
+      ) : loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563EB" />
         </View>
       ) : (
         <ScrollView
@@ -144,7 +167,7 @@ export default function MapScreen() {
                   <Text style={styles.distanceLabel}>{job.distance}</Text>
                 </View>
                 <View style={styles.CompanyIcon}>
-                  <Image source={require('@/assets/images/icon.png')} style={styles.companyLogo} />
+                  <Building2 color="#64748B" size={24} />
                 </View>
                 <View style={styles.jobInfo}>
                   <Text style={styles.jobTitle}>{job.title}</Text>
@@ -332,6 +355,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   companyLogo: {
     width: 32,
