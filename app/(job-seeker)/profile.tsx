@@ -9,6 +9,7 @@ import {
   User, Phone, MapPin, Briefcase, Calendar, Award,
   FileText, Plus, ChevronRight, Edit3, Settings, LogOut, Star, Building2,
 } from 'lucide-react-native';
+// LogOut is imported above — no dynamic require needed
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { useSignOut } from '@/hooks/useSignOut';
@@ -342,9 +343,7 @@ export default function ProfileScreen() {
   );
 }
 
-// Need LogOut import — already imported above via lucide
 
-const { LogOut } = require('lucide-react-native');
 
 const styles = StyleSheet.create({
   container: { ...G.screen },
