@@ -1,267 +1,145 @@
 import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import {
-  Bell,
-  Briefcase,
-  Users,
-  CheckCircle,
-  XCircle,
-  Clock,
-  ChevronRight,
+  Bell, Briefcase, CheckCircle, XCircle, Users,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { Notification } from '@/types/database';
 import { useAuthStore } from '@/stores/authStore';
+import { EmptyState } from '@/components/ui/EmptyState';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette,
+} from '@/constants/theme';
+import { formatTimeAgo } from '@/utils/formatters';
 
-const notificationIcons: Record<string, any> = {
-  new_application: Briefcase,
+const iconMap: Record<string, any> = {
+  new_application:      Briefcase,
   application_accepted: CheckCircle,
   application_rejected: XCircle,
-  job_matched: Users,
-  default: Bell,
+  job_matched:          Users,
+  default:              Bell,
 };
 
 export default function NotificationsScreen() {
-  const router = useRouter();
   const { user } = useAuthStore();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading,       setLoading]       = useState(true);
+  const [refreshing,    setRefreshing]    = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      fetchNotifications();
-    }
-  }, [user]);
+  useEffect(() => { if (user) fetchNotifications(); }, [user]);
 
   const fetchNotifications = async () => {
     if (!user) return;
     setLoading(true);
-
     const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
+      .from('notifications').select('*').eq('user_id', user.id)
       .order('created_at', { ascending: false });
-
-    if (data) {
-      setNotifications(data);
-    }
-
+    if (data) setNotifications(data);
     setLoading(false);
     setRefreshing(false);
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchNotifications();
-  };
-
-  const markAsRead = async (id: string) => {
+  const markRead = async (id: string) => {
     await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    fetchNotifications();
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 
-  const markAllAsRead = async () => {
+  const markAllRead = async () => {
     if (!user) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id);
-    fetchNotifications();
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
-  const formatTime = (date: string) => {
-    const now = new Date();
-    const notifDate = new Date(date);
-    const diffMs = now.getTime() - notifDate.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const unread = notifications.filter(n => !n.is_read).length;
 
-    if (diffHours < 1) return 'Just now';
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return notifDate.toLocaleDateString();
-  };
-
-  const renderNotification = ({ item }: { item: Notification }) => {
-    const Icon = notificationIcons[item.type] || notificationIcons.default;
-
+  const renderItem = ({ item }: { item: Notification }) => {
+    const Icon = iconMap[item.type] || iconMap.default;
     return (
       <TouchableOpacity
-        style={[styles.notificationCard, !item.is_read && styles.unreadCard]}
-        onPress={() => markAsRead(item.id)}
+        style={[styles.card, !item.is_read && styles.cardUnread]}
+        onPress={() => markRead(item.id)}
+        activeOpacity={0.85}
       >
-        <View style={[styles.iconContainer, !item.is_read && styles.iconContainerUnread]}>
-          <Icon color={item.is_read ? '#94A3B8' : '#059669'} size={20} />
+        <View style={[styles.iconWrap, !item.is_read && { backgroundColor: Colors.employerLight }]}>
+          <Icon color={item.is_read ? Colors.textMuted : Colors.employer} size={20} strokeWidth={2} />
         </View>
-        <View style={styles.notificationContent}>
-          <Text style={[styles.notificationTitle, !item.is_read && styles.unreadTitle]}>
-            {item.title}
-          </Text>
-          {item.message && (
-            <Text style={styles.notificationMessage} numberOfLines={2}>
-              {item.message}
-            </Text>
-          )}
-          <Text style={styles.notificationTime}>{formatTime(item.created_at)}</Text>
+        <View style={styles.content}>
+          <Text style={[styles.title, !item.is_read && styles.titleUnread]}>{item.title}</Text>
+          {item.message && <Text style={styles.message} numberOfLines={2}>{item.message}</Text>}
+          <Text style={styles.time}>{formatTimeAgo(item.created_at)}</Text>
         </View>
-        {!item.is_read && <View style={styles.unreadDot} />}
+        {!item.is_read && <View style={styles.dot} />}
       </TouchableOpacity>
     );
   };
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
-
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Notifications</Text>
-          <Text style={styles.headerSubtitle}>
-            {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
-          </Text>
+          <Text style={styles.heading}>Notifications</Text>
+          <Text style={styles.sub}>{unread > 0 ? `${unread} unread` : 'All caught up'}</Text>
         </View>
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllAsRead}>
-            <Text style={styles.markAllText}>Mark all read</Text>
+        {unread > 0 && (
+          <TouchableOpacity onPress={markAllRead} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.markAll}>Mark all read</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Notifications List */}
       <FlatList
         data={notifications}
-        renderItem={renderNotification}
-        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        keyExtractor={i => i.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#059669']} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Bell color="#CBD5E1" size={48} />
-            <Text style={styles.emptyStateTitle}>No Notifications</Text>
-            <Text style={styles.emptyStateText}>
-              You'll be notified about new applications and updates
-            </Text>
-          </View>
-        }
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotifications(); }} tintColor={Colors.employer} />}
+        ListEmptyComponent={!loading ? (
+          <EmptyState
+            icon={<Bell color={Colors.textMuted} size={40} strokeWidth={1.5} />}
+            title="No notifications"
+            description="You'll be notified about new applications and updates"
+          />
+        ) : null}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
+  container: { ...G.screen },
+
+  header: { ...G.rowBetween, paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[4] },
+  heading: { ...Typography.h2, color: Colors.textPrimary },
+  sub:     { ...Typography.bodySm, color: Colors.textSecondary, marginTop: Spacing[0.5] },
+  markAll: { ...Typography.label, color: Colors.employer, fontWeight: '600' },
+
+  list: { padding: Space.pagePadding, paddingTop: Spacing[2], paddingBottom: Space.listBottom },
+
+  card: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    padding: Space.cardPadding,
+    marginBottom: Space.cardGap,
+    borderWidth: 1, borderColor: Colors.border,
+    gap: Spacing[3],
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+  cardUnread: { backgroundColor: Colors.employerLight + '33', borderColor: Colors.employerMid },
+
+  iconWrap: {
+    ...G.iconMd,
+    backgroundColor: Colors.bg,
+    flexShrink: 0,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  markAllText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#059669',
-  },
-  listContainer: {
-    padding: 20,
-    paddingTop: 8,
-  },
-  notificationCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  unreadCard: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  iconContainerUnread: {
-    backgroundColor: '#DCFCE7',
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  unreadTitle: {
-    fontWeight: '600',
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#94A3B8',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#059669',
-    marginTop: 4,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-  },
+  content:      { flex: 1 },
+  title:        { ...Typography.h5, color: Colors.textPrimary, marginBottom: 3 },
+  titleUnread:  { fontWeight: '700' },
+  message:      { ...Typography.bodySm, color: Colors.textSecondary, lineHeight: 20, marginBottom: 4 },
+  time:         { ...Typography.caption, color: Colors.textMuted },
+  dot:          { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.employer, marginTop: 4 },
 });

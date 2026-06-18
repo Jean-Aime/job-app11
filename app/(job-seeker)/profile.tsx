@@ -1,809 +1,555 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  Image,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  TextInput, Alert, ActivityIndicator, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  User,
-  Mail,
-  Phone,
-  MapPin,
-  Briefcase,
-  Calendar,
-  Award,
-  FileText,
-  Plus,
-  ChevronRight,
-  Edit3,
-  Settings,
-  LogOut,
-  Star,
-  Building2,
+  User, Phone, MapPin, Briefcase, Calendar, Award,
+  FileText, Plus, ChevronRight, Edit3, Settings, LogOut, Star, Building2,
 } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { useSignOut } from '@/hooks/useSignOut';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette,
+} from '@/constants/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, jobSeeker, fetchJobSeekerProfile } = useAuthStore();
   const { handleSignOut } = useSignOut();
-  const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [formData, setFormData] = useState({
-    full_name: '',
-    phone_number: '',
-    city: '',
-    country: '',
-    bio: '',
-    current_occupation: '',
-    years_of_experience: 0,
+  const [loading,  setLoading]  = useState(false);
+  const [editing,  setEditing]  = useState(false);
+  const [skills,   setSkills]   = useState<any[]>([]);
+  const [exps,     setExps]     = useState<any[]>([]);
+  const [certs,    setCerts]    = useState<any[]>([]);
+  const [form, setForm] = useState({
+    full_name: '', phone_number: '', city: '', country: '',
+    bio: '', current_occupation: '', years_of_experience: 0,
   });
-  const [skills, setSkills] = useState<any[]>([]);
-  const [experiences, setExperiences] = useState<any[]>([]);
-  const [certificates, setCertificates] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (jobSeeker) {
-      loadProfileData();
-    }
-  }, [jobSeeker]);
-
-  const loadProfileData = async () => {
+  const load = useCallback(async () => {
     if (!jobSeeker) return;
-
-    setFormData({
-      full_name: jobSeeker.full_name || '',
-      phone_number: jobSeeker.phone_number || '',
-      city: jobSeeker.city || '',
-      country: jobSeeker.country || '',
-      bio: jobSeeker.bio || '',
-      current_occupation: jobSeeker.current_occupation || '',
+    setForm({
+      full_name:           jobSeeker.full_name           || '',
+      phone_number:        jobSeeker.phone_number        || '',
+      city:                jobSeeker.city                || '',
+      country:             jobSeeker.country             || '',
+      bio:                 jobSeeker.bio                 || '',
+      current_occupation:  jobSeeker.current_occupation  || '',
       years_of_experience: jobSeeker.years_of_experience || 0,
     });
+    const [{ data: s }, { data: e }, { data: c }] = await Promise.all([
+      supabase.from('job_seeker_skills').select('*, skill:skills(*)').eq('job_seeker_id', jobSeeker.id),
+      supabase.from('experiences').select('*').eq('job_seeker_id', jobSeeker.id).order('start_date', { ascending: false }),
+      supabase.from('certificates').select('*').eq('job_seeker_id', jobSeeker.id),
+    ]);
+    if (s) setSkills(s);
+    if (e) setExps(e);
+    if (c) setCerts(c);
+  }, [jobSeeker?.id]);
 
-    // Fetch skills
-    const { data: skillsData } = await supabase
-      .from('job_seeker_skills')
-      .select('*, skill:skills(*)')
-      .eq('job_seeker_id', jobSeeker.id);
-
-    if (skillsData) setSkills(skillsData);
-
-    // Fetch experiences
-    const { data: expData } = await supabase
-      .from('experiences')
-      .select('*')
-      .eq('job_seeker_id', jobSeeker.id)
-      .order('start_date', { ascending: false });
-
-    if (expData) setExperiences(expData);
-
-    // Fetch certificates
-    const { data: certData } = await supabase
-      .from('certificates')
-      .select('*')
-      .eq('job_seeker_id', jobSeeker.id);
-
-    if (certData) setCertificates(certData);
-  };
+  useEffect(() => { load(); }, [load]);
 
   const handleSave = async () => {
     if (!jobSeeker) return;
     setLoading(true);
-
-    const { error } = await supabase
-      .from('job_seekers')
-      .update({
-        full_name: formData.full_name,
-        phone_number: formData.phone_number,
-        city: formData.city,
-        country: formData.country,
-        bio: formData.bio,
-        current_occupation: formData.current_occupation,
-        years_of_experience: formData.years_of_experience,
-      })
-      .eq('id', jobSeeker.id);
-
+    const { error } = await supabase.from('job_seekers').update({ ...form }).eq('id', jobSeeker.id);
     setLoading(false);
     if (error) {
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      Alert.alert('Error', 'Failed to save. Please try again.');
     } else {
-      Alert.alert('Success', 'Profile updated successfully');
       setEditing(false);
       fetchJobSeekerProfile();
     }
   };
 
-  const handleSignOutLocal = () => handleSignOut();
-
-  const profileCompletion = jobSeeker?.profile_completion_score || 0;
-
-  const getProgressColor = (score: number) => {
-    if (score < 40) return '#EF4444';
-    if (score < 70) return '#F59E0B';
-    return '#10B981';
-  };
+  const pct = jobSeeker?.profile_completion_score || 0;
+  const progressColor = pct < 40 ? Colors.error : pct < 70 ? Colors.warning : Colors.success;
 
   if (!jobSeeker) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={G.emptyCenter}>
+          <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Profile</Text>
+
+        {/* ── Top bar ─────────────────────────────────── */}
+        <View style={styles.topBar}>
+          <Text style={styles.pageTitle}>My Profile</Text>
           <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => Alert.alert('Settings', 'Settings coming soon')}
+            style={styles.settingsBtn}
+            onPress={() => Alert.alert('Settings', 'Coming soon')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Settings color="#64748B" size={24} />
+            <Settings color={Colors.textSecondary} size={22} strokeWidth={2} />
           </TouchableOpacity>
         </View>
 
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            {jobSeeker.profile_photo_url ? (
-              <Image source={{ uri: jobSeeker.profile_photo_url }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <User color="#FFFFFF" size={40} />
-              </View>
-            )}
-            <TouchableOpacity style={styles.editAvatarButton}>
-              <Edit3 color="#FFFFFF" size={16} />
+        {/* ── Profile hero card ────────────────────────── */}
+        <View style={styles.heroCard}>
+          <View style={styles.avatarWrap}>
+            {jobSeeker.profile_photo_url
+              ? <Image source={{ uri: jobSeeker.profile_photo_url }} style={styles.avatar} />
+              : <View style={styles.avatarFallback}><User color={Palette.white} size={36} strokeWidth={1.8} /></View>}
+            <TouchableOpacity style={styles.editAvatar}>
+              <Edit3 color={Palette.white} size={14} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.userName}>{formData.full_name || 'Your Name'}</Text>
+
+          <Text style={styles.userName}>{form.full_name || 'Your Name'}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
 
-          {/* Profile Completion */}
-          <View style={styles.completionContainer}>
-            <View style={styles.completionHeader}>
-              <Text style={styles.completionLabel}>Profile Completion</Text>
-              <Text style={[styles.completionValue, { color: getProgressColor(profileCompletion) }]}>
-                {profileCompletion}%
-              </Text>
+          {/* Profile completion */}
+          <View style={styles.progressWrap}>
+            <View style={G.rowBetween}>
+              <Text style={styles.progressLabel}>Profile Completion</Text>
+              <Text style={[styles.progressPct, { color: progressColor }]}>{pct}%</Text>
             </View>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${profileCompletion}%`, backgroundColor: getProgressColor(profileCompletion) },
-                ]}
-              />
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${pct}%` as any, backgroundColor: progressColor }]} />
             </View>
           </View>
         </View>
 
-        {/* Quick Edit Form */}
+        {/* ── Edit form ───────────────────────────────── */}
         {editing ? (
-          <View style={styles.editForm}>
+          <View style={styles.editSection}>
             <Text style={styles.sectionTitle}>Edit Profile</Text>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.full_name}
-                onChangeText={(text) => setFormData({ ...formData, full_name: text })}
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.phone_number}
-                onChangeText={(text) => setFormData({ ...formData, phone_number: text })}
-                keyboardType="phone-pad"
-              />
-            </View>
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>City</Text>
+
+            {[
+              { key: 'full_name',          label: 'Full Name',            keyboard: 'default' as const },
+              { key: 'phone_number',        label: 'Phone',                keyboard: 'phone-pad' as const },
+              { key: 'current_occupation',  label: 'Current Occupation',   keyboard: 'default' as const },
+            ].map(f => (
+              <View key={f.key} style={styles.fieldWrap}>
+                <Text style={G.inputLabel}>{f.label}</Text>
                 <TextInput
                   style={styles.input}
-                  value={formData.city}
-                  onChangeText={(text) => setFormData({ ...formData, city: text })}
+                  value={String((form as any)[f.key])}
+                  onChangeText={v => setForm({ ...form, [f.key]: v })}
+                  keyboardType={f.keyboard}
                 />
               </View>
-              <View style={styles.inputSpacer} />
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Country</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.country}
-                  onChangeText={(text) => setFormData({ ...formData, country: text })}
-                />
-              </View>
+            ))}
+
+            <View style={styles.rowFields}>
+              {['city','country'].map(k => (
+                <View key={k} style={styles.halfField}>
+                  <Text style={G.inputLabel}>{k.charAt(0).toUpperCase() + k.slice(1)}</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={(form as any)[k]}
+                    onChangeText={v => setForm({ ...form, [k]: v })}
+                  />
+                </View>
+              ))}
             </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Bio</Text>
+
+            <View style={styles.fieldWrap}>
+              <Text style={G.inputLabel}>Bio</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                value={formData.bio}
-                onChangeText={(text) => setFormData({ ...formData, bio: text })}
+                value={form.bio}
+                onChangeText={v => setForm({ ...form, bio: v })}
                 multiline
                 numberOfLines={4}
+                textAlignVertical="top"
               />
             </View>
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Current Occupation</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.current_occupation}
-                  onChangeText={(text) => setFormData({ ...formData, current_occupation: text })}
-                />
-              </View>
-              <View style={styles.inputSpacer} />
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Years of Experience</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.years_of_experience.toString()}
-                  onChangeText={(text) => setFormData({ ...formData, years_of_experience: parseInt(text) || 0 })}
-                  keyboardType="number-pad"
-                />
-              </View>
-            </View>
+
             <View style={styles.editActions}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setEditing(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditing(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
-                {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveButtonText}>Save</Text>}
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
+                {loading
+                  ? <ActivityIndicator color={Palette.white} />
+                  : <Text style={styles.saveBtnText}>Save Changes</Text>}
               </TouchableOpacity>
             </View>
           </View>
+
         ) : (
           <>
-            {/* Personal Info */}
+            {/* ── Personal info ───────────────────────── */}
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Personal Information</Text>
-                <TouchableOpacity onPress={() => setEditing(true)}>
-                  <Edit3 color="#2563EB" size={18} />
+              <View style={G.sectionHeader}>
+                <Text style={G.sectionTitle}>Personal Information</Text>
+                <TouchableOpacity onPress={() => setEditing(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Edit3 color={Colors.primary} size={18} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
-              <View style={styles.infoCard}>
-                <View style={styles.infoRow}>
-                  <Phone color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>{formData.phone_number || 'Add phone number'}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <MapPin color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>
-                    {[formData.city, formData.country].filter(Boolean).join(', ') || 'Add location'}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Briefcase color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>{formData.current_occupation || 'Add occupation'}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Calendar color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>{formData.years_of_experience} years experience</Text>
-                </View>
-              </View>
-              {formData.bio && (
-                <View style={styles.bioCard}>
-                  <Text style={styles.bioText}>{formData.bio}</Text>
-                </View>
-              )}
-            </View>
 
-            {/* Skills */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Skills ({skills.length})</Text>
-                <TouchableOpacity onPress={() => router.push('/(job-seeker)/profile/skills')}>
-                  <Plus color="#2563EB" size={20} />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.skillsGrid}>
-                {skills.slice(0, 6).map((skill: any) => (
-                  <View key={skill.id} style={styles.skillBadge}>
-                    <Star color="#F59E0B" size={12} />
-                    <Text style={styles.skillText}>{skill.skill?.name}</Text>
+              <View style={styles.infoCard}>
+                {[
+                  { icon: Phone,    value: form.phone_number       || 'Add phone number' },
+                  { icon: MapPin,   value: [form.city, form.country].filter(Boolean).join(', ') || 'Add location' },
+                  { icon: Briefcase,value: form.current_occupation  || 'Add occupation' },
+                  { icon: Calendar, value: `${form.years_of_experience} yrs experience` },
+                ].map((row, i) => (
+                  <View key={i} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                    <row.icon color={Colors.textMuted} size={18} strokeWidth={2} />
+                    <Text style={styles.infoValue}>{row.value}</Text>
                   </View>
                 ))}
-                {skills.length === 0 && (
-                  <TouchableOpacity style={styles.addItemCard}>
-                    <Plus color="#94A3B8" size={24} />
-                    <Text style={styles.addItemText}>Add your skills</Text>
-                  </TouchableOpacity>
-                )}
               </View>
-              {skills.length > 6 && (
-                <TouchableOpacity style={styles.seeMoreButton}>
-                  <Text style={styles.seeMoreText}>See all {skills.length} skills</Text>
-                  <ChevronRight color="#2563EB" size={16} />
-                </TouchableOpacity>
-              )}
-            </View>
 
-            {/* Experience */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Experience ({experiences.length})</Text>
-                <TouchableOpacity onPress={() => router.push('/(job-seeker)/profile/experience/new')}>
-                  <Plus color="#2563EB" size={20} />
-                </TouchableOpacity>
-              </View>
-              {experiences.slice(0, 3).map((exp: any) => (
-                <View key={exp.id} style={styles.experienceCard}>
-                  <View style={styles.experienceIcon}>
-                    <Building2 color="#2563EB" size={20} />
-                  </View>
-                  <View style={styles.experienceInfo}>
-                    <Text style={styles.experienceTitle}>{exp.job_title}</Text>
-                    <Text style={styles.experienceCompany}>{exp.company_name}</Text>
-                    <Text style={styles.experienceDate}>
-                      {new Date(exp.start_date).getFullYear()} - {exp.is_current ? 'Present' : exp.end_date ? new Date(exp.end_date).getFullYear() : ''}
-                    </Text>
-                  </View>
+              {form.bio ? (
+                <View style={styles.bioCard}>
+                  <Text style={styles.bioText}>{form.bio}</Text>
                 </View>
-              ))}
-              {experiences.length === 0 && (
-                <TouchableOpacity style={styles.addItemCard}>
-                  <Plus color="#94A3B8" size={24} />
-                  <Text style={styles.addItemText}>Add your work experience</Text>
-                </TouchableOpacity>
-              )}
-              {experiences.length > 3 && (
-                <TouchableOpacity style={styles.seeMoreButton}>
-                  <Text style={styles.seeMoreText}>See all experience</Text>
-                  <ChevronRight color="#2563EB" size={16} />
-                </TouchableOpacity>
-              )}
+              ) : null}
             </View>
 
-            {/* Certificates */}
+            {/* ── Skills ──────────────────────────────── */}
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Certificates ({certificates.length})</Text>
-                <TouchableOpacity onPress={() => router.push('/(job-seeker)/profile/certificates/new')}>
-                  <Plus color="#2563EB" size={20} />
+              <View style={G.sectionHeader}>
+                <Text style={G.sectionTitle}>Skills ({skills.length})</Text>
+                <TouchableOpacity onPress={() => router.push('/(job-seeker)/profile/skills' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Plus color={Colors.primary} size={20} strokeWidth={2.5} />
                 </TouchableOpacity>
               </View>
-              {certificates.slice(0, 3).map((cert: any) => (
-                <View key={cert.id} style={styles.certificateCard}>
-                  <View style={styles.certificateIcon}>
-                    <Award color="#10B981" size={20} />
-                  </View>
-                  <View style={styles.certificateInfo}>
-                    <Text style={styles.certificateTitle}>{cert.title}</Text>
-                    <Text style={styles.certificateOrg}>{cert.issuing_organization}</Text>
-                  </View>
+              {skills.length > 0 ? (
+                <View style={styles.skillsGrid}>
+                  {skills.slice(0, 8).map((s: any) => (
+                    <View key={s.id} style={styles.skillChip}>
+                      <Star color={Colors.warning} size={11} strokeWidth={2} fill={Colors.warning} />
+                      <Text style={styles.skillText}>{s.skill?.name}</Text>
+                    </View>
+                  ))}
+                  {skills.length > 8 && (
+                    <TouchableOpacity
+                      style={[styles.skillChip, styles.skillChipMore]}
+                      onPress={() => router.push('/(job-seeker)/profile/skills' as any)}
+                    >
+                      <Text style={styles.skillChipMoreText}>+{skills.length - 8} more</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              ))}
-              {certificates.length === 0 && (
-                <TouchableOpacity style={styles.addItemCard}>
-                  <Plus color="#94A3B8" size={24} />
-                  <Text style={styles.addItemText}>Add your certificates</Text>
+              ) : (
+                <TouchableOpacity style={styles.addCard} onPress={() => router.push('/(job-seeker)/profile/skills' as any)}>
+                  <Plus color={Colors.textMuted} size={22} strokeWidth={2} />
+                  <Text style={styles.addCardText}>Add your skills</Text>
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Resume */}
+            {/* ── Experience ──────────────────────────── */}
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Resume</Text>
+              <View style={G.sectionHeader}>
+                <Text style={G.sectionTitle}>Experience ({exps.length})</Text>
+                <TouchableOpacity onPress={() => router.push('/(job-seeker)/profile/experience/new' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Plus color={Colors.primary} size={20} strokeWidth={2.5} />
+                </TouchableOpacity>
               </View>
+              {exps.length > 0 ? (
+                exps.slice(0, 3).map((e: any) => (
+                  <View key={e.id} style={styles.listCard}>
+                    <View style={[styles.listIcon, { backgroundColor: Colors.primaryLight }]}>
+                      <Building2 color={Colors.primary} size={18} strokeWidth={2} />
+                    </View>
+                    <View style={styles.listInfo}>
+                      <Text style={styles.listTitle}>{e.job_title}</Text>
+                      <Text style={styles.listSub}>{e.company_name}</Text>
+                      <Text style={styles.listMeta}>
+                        {new Date(e.start_date).getFullYear()} – {e.is_current ? 'Present' : e.end_date ? new Date(e.end_date).getFullYear() : ''}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <TouchableOpacity style={styles.addCard} onPress={() => router.push('/(job-seeker)/profile/experience/new' as any)}>
+                  <Plus color={Colors.textMuted} size={22} strokeWidth={2} />
+                  <Text style={styles.addCardText}>Add work experience</Text>
+                </TouchableOpacity>
+              )}
+              {exps.length > 3 && (
+                <TouchableOpacity style={styles.seeMore} onPress={() => router.push('/(job-seeker)/profile/experience/new' as any)}>
+                  <Text style={styles.seeMoreText}>See all {exps.length} experiences</Text>
+                  <ChevronRight color={Colors.primary} size={15} strokeWidth={2} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* ── Certificates ─────────────────────────── */}
+            <View style={styles.section}>
+              <View style={G.sectionHeader}>
+                <Text style={G.sectionTitle}>Certificates ({certs.length})</Text>
+                <TouchableOpacity onPress={() => router.push('/(job-seeker)/profile/certificates/new' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Plus color={Colors.primary} size={20} strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
+              {certs.length > 0 ? (
+                certs.slice(0, 3).map((c: any) => (
+                  <View key={c.id} style={styles.listCard}>
+                    <View style={[styles.listIcon, { backgroundColor: Colors.successLight }]}>
+                      <Award color={Colors.success} size={18} strokeWidth={2} />
+                    </View>
+                    <View style={styles.listInfo}>
+                      <Text style={styles.listTitle}>{c.title}</Text>
+                      <Text style={styles.listSub}>{c.issuing_organization}</Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <TouchableOpacity style={styles.addCard} onPress={() => router.push('/(job-seeker)/profile/certificates/new' as any)}>
+                  <Plus color={Colors.textMuted} size={22} strokeWidth={2} />
+                  <Text style={styles.addCardText}>Add certificates</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* ── Resume ───────────────────────────────── */}
+            <View style={styles.section}>
+              <Text style={[G.sectionTitle, { marginBottom: Spacing[3] }]}>Resume</Text>
               <TouchableOpacity style={styles.resumeCard}>
-                <FileText color="#2563EB" size={24} />
-                <View style={styles.resumeInfo}>
-                  <Text style={styles.resumeTitle}>
+                <View style={[styles.listIcon, { backgroundColor: Colors.primaryLight }]}>
+                  <FileText color={Colors.primary} size={18} strokeWidth={2} />
+                </View>
+                <View style={styles.listInfo}>
+                  <Text style={styles.listTitle}>
                     {jobSeeker.resume_url ? 'My_Resume.pdf' : 'Upload your resume'}
                   </Text>
-                  <Text style={styles.resumeHint}>
-                    {jobSeeker.resume_url ? 'Tap to update' : 'PDF, DOC up to 5MB'}
+                  <Text style={styles.listMeta}>
+                    {jobSeeker.resume_url ? 'Tap to update' : 'PDF, DOC up to 5 MB'}
                   </Text>
                 </View>
-                <ChevronRight color="#94A3B8" size={20} />
+                <ChevronRight color={Colors.textMuted} size={18} strokeWidth={2} />
               </TouchableOpacity>
             </View>
           </>
         )}
 
-        {/* Sign Out */}
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <LogOut color="#EF4444" size={20} />
+        {/* ── Sign out ─────────────────────────────────── */}
+        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+          <LogOut color={Colors.error} size={18} strokeWidth={2} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
-        <View style={styles.bottomPadding} />
+        <View style={G.listBottom} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// Need LogOut import — already imported above via lucide
+
+const { LogOut } = require('lucide-react-native');
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
+  container: { ...G.screen },
+
+  topBar: {
+    ...G.rowBetween,
+    paddingHorizontal: Space.pagePadding,
+    paddingTop: Space.pageTop,
+    paddingBottom: Spacing[3],
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  pageTitle:   { ...Typography.h2, color: Colors.textPrimary },
+  settingsBtn: { padding: Spacing[1] },
+
+  // Hero card
+  heroCard: {
     alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  settingsButton: {
-    padding: 8,
-  },
-  profileCard: {
-    alignItems: 'center',
-    marginHorizontal: 20,
-    marginTop: 24,
-    padding: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    marginHorizontal: Space.pagePadding,
+    marginBottom: Spacing[2],
+    padding: Space.cardPaddingLg,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Colors.border,
   },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
+  avatarWrap:    { position: 'relative', marginBottom: Spacing[4] },
+  avatar:        { width: 96, height: 96, borderRadius: 48 },
+  avatarFallback:{
+    width: 96, height: 96, borderRadius: 48,
+    backgroundColor: Colors.primary,
+    alignItems: 'center', justifyContent: 'center',
   },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  editAvatar: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: Colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: Colors.bgCard,
   },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editAvatarButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-  },
-  userName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  userEmail: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 16,
-  },
-  completionContainer: {
-    width: '100%',
-    marginTop: 8,
-  },
-  completionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  completionLabel: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  completionValue: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
+  userName:  { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing[0.5] },
+  userEmail: { ...Typography.bodySm, color: Colors.textSecondary, marginBottom: Spacing[4] },
+
+  // Progress
+  progressWrap: { width: '100%', gap: Spacing[2] },
+  progressLabel: { ...Typography.caption, color: Colors.textSecondary },
+  progressPct:   { ...Typography.label, fontWeight: '700' },
+  progressTrack: { height: 6, backgroundColor: Colors.bg, borderRadius: 3, overflow: 'hidden' },
+  progressFill:  { height: '100%', borderRadius: 3 },
+
+  // Sections
   section: {
-    paddingHorizontal: 20,
-    marginTop: 24,
+    paddingHorizontal: Space.pagePadding,
+    marginTop: Space.sectionGap,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
+  sectionTitle: { ...G.sectionTitle },
+
+  // Info card
   infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Colors.border,
+    paddingHorizontal: Space.cardPadding,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
+    gap: Spacing[3],
+    paddingVertical: Spacing[3.5],
   },
-  infoValue: {
-    fontSize: 15,
-    color: '#1E293B',
-    flex: 1,
+  infoRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
   },
-  bioCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 12,
+  infoValue: { ...Typography.body, color: Colors.textPrimary, flex: 1 },
+  bioCard:   {
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Colors.border,
+    padding: Space.cardPadding,
+    marginTop: Spacing[3],
   },
-  bioText: {
-    fontSize: 15,
-    color: '#475569',
-    lineHeight: 24,
-  },
-  skillsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  skillBadge: {
+  bioText: { ...Typography.body, color: Colors.textSecondary, lineHeight: 24 },
+
+  // Skills grid
+  skillsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing[2] },
+  skillChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    gap: Spacing[1.5],
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[1.5],
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Colors.border,
   },
-  skillText: {
-    fontSize: 13,
-    color: '#1E293B',
-    fontWeight: '500',
-  },
-  addItemCard: {
+  skillText:         { ...Typography.label, color: Colors.textPrimary },
+  skillChipMore:     { backgroundColor: Colors.primaryLight, borderColor: Colors.primaryLight },
+  skillChipMoreText: { ...Typography.label, color: Colors.primary, fontWeight: '600' },
+
+  // Add empty card
+  addCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    gap: Spacing[2],
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    padding: Spacing[5],
+    borderWidth: 1.5,
+    borderColor: Colors.border,
     borderStyle: 'dashed',
   },
-  addItemText: {
-    fontSize: 14,
-    color: '#94A3B8',
-  },
-  seeMoreButton: {
+  addCardText: { ...Typography.body, color: Colors.textMuted },
+
+  // List items (experience / cert / resume)
+  listCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    marginTop: 12,
-  },
-  seeMoreText: {
-    fontSize: 14,
-    color: '#2563EB',
-    fontWeight: '500',
-  },
-  experienceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    padding: Space.cardPadding,
+    marginBottom: Space.cardGapSm,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Colors.border,
+    gap: Spacing[3],
   },
-  experienceIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  listIcon: {
+    width: 44, height: 44, borderRadius: Radius.md,
+    alignItems: 'center', justifyContent: 'center',
   },
-  experienceInfo: {
-    flex: 1,
-  },
-  experienceTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  experienceCompany: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 2,
-  },
-  experienceDate: {
-    fontSize: 12,
-    color: '#94A3B8',
-  },
-  certificateCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  certificateIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#ECFDF5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  certificateInfo: {
-    flex: 1,
-  },
-  certificateTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  certificateOrg: {
-    fontSize: 13,
-    color: '#64748B',
-  },
+  listInfo:  { flex: 1 },
+  listTitle: { ...Typography.h5, color: Colors.textPrimary, marginBottom: 2 },
+  listSub:   { ...Typography.bodySm, color: Colors.textSecondary },
+  listMeta:  { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
+
   resumeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    padding: Space.cardPadding,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 12,
+    borderColor: Colors.border,
+    gap: Spacing[3],
   },
-  resumeInfo: {
-    flex: 1,
-  },
-  resumeTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  resumeHint: {
-    fontSize: 13,
-    color: '#94A3B8',
-    marginTop: 2,
-  },
-  signOutButton: {
+
+  seeMore: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginHorizontal: 20,
-    marginTop: 32,
-    padding: 16,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 16,
+    gap: Spacing[1],
+    marginTop: Spacing[3],
   },
-  signOutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#EF4444',
+  seeMoreText: { ...Typography.label, color: Colors.primary, fontWeight: '600' },
+
+  // Edit form
+  editSection: {
+    paddingHorizontal: Space.pagePadding,
+    marginTop: Space.sectionGap,
+    gap: Spacing[4],
   },
-  bottomPadding: {
-    height: 100,
-  },
-  editForm: {
-    paddingHorizontal: 20,
-    marginTop: 24,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
+  fieldWrap: { gap: Spacing[1.5] },
+  rowFields: { flexDirection: 'row', gap: Spacing[3] },
+  halfField: { flex: 1, gap: Spacing[1.5] },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: '#1E293B',
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Space.inputPaddingH,
+    paddingVertical: Space.inputPaddingV,
+    ...Typography.input,
+    color: Colors.textPrimary,
+    minHeight: 52,
   },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
+  textArea: { minHeight: 100, textAlignVertical: 'top', paddingTop: Spacing[3] },
+
+  editActions: { flexDirection: 'row', gap: Spacing[3], marginTop: Spacing[2] },
+  cancelBtn: {
+    flex: 1, height: 52, borderRadius: Radius.md,
+    backgroundColor: Colors.bg,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: Colors.border,
   },
-  row: {
+  cancelBtnText: { ...Typography.button, color: Colors.textSecondary },
+  saveBtn: {
+    flex: 1, height: 52, borderRadius: Radius.md,
+    backgroundColor: Colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  saveBtnText: { ...Typography.button, color: Palette.white },
+
+  // Sign out
+  signOutBtn: {
     flexDirection: 'row',
-  },
-  inputSpacer: {
-    width: 12,
-  },
-  editActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    gap: Spacing[2],
+    marginHorizontal: Space.pagePadding,
+    marginTop: Space.sectionGap,
+    padding: Spacing[4],
+    backgroundColor: Colors.errorLight,
+    borderRadius: Radius.lg,
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  saveButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  signOutText: { ...Typography.button, color: Colors.error },
 });

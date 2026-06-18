@@ -1,29 +1,40 @@
 /**
- * JobLink Africa — Design System
- * Enterprise-grade token system inspired by LinkedIn, Indeed, Airbnb, Stripe
+ * JobLink Africa — Design System v2
+ * Single source of truth for ALL visual properties.
+ * Every screen imports from here — no raw hex values in app code.
  */
 import { Dimensions, Platform } from 'react-native';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-// ─── Breakpoints ────────────────────────────────────────────────────────────
+// ─── Breakpoints ─────────────────────────────────────────────────────────────
 export const Breakpoints = {
-  sm: 375,   // small phones (SE, Pixel 4a)
-  md: 414,   // standard phones (iPhone 14, Pixel 7)
-  lg: 768,   // large phones / small tablets
-  xl: 1024,  // tablets
+  xs:  320,   // iPhone SE 1st gen
+  sm:  375,   // iPhone SE 3rd gen, Pixel 4a
+  md:  414,   // iPhone 14, Pixel 7
+  lg:  768,   // iPad mini, large phones landscape
+  xl:  1024,  // iPad Pro
 } as const;
 
+export const isXSmall = SCREEN_W <= Breakpoints.xs;
 export const isSmall  = SCREEN_W < Breakpoints.sm;
 export const isMedium = SCREEN_W >= Breakpoints.sm && SCREEN_W < Breakpoints.lg;
 export const isTablet = SCREEN_W >= Breakpoints.lg;
 
-// ─── Color Palette ──────────────────────────────────────────────────────────
+// Responsive helper — returns value based on current screen width
+export function responsive<T>(sm: T, md: T, lg?: T): T {
+  if (isTablet && lg !== undefined) return lg;
+  if (SCREEN_W >= Breakpoints.md) return md;
+  return sm;
+}
+
+// ─── Color Palette ────────────────────────────────────────────────────────────
 export const Palette = {
-  // Blues (primary)
+  // Blues — primary brand
   blue50:  '#EFF6FF',
   blue100: '#DBEAFE',
   blue200: '#BFDBFE',
+  blue300: '#93C5FD',
   blue400: '#60A5FA',
   blue500: '#3B82F6',
   blue600: '#2563EB',
@@ -31,43 +42,34 @@ export const Palette = {
   blue800: '#1E40AF',
   blue900: '#1E3A8A',
 
-  // Greens (employer / success)
+  // Greens — employer / success
   green50:  '#F0FDF4',
   green100: '#DCFCE7',
   green200: '#BBF7D0',
-  green400: '#4ADE80',
   green500: '#22C55E',
   green600: '#16A34A',
   green700: '#15803D',
-  green800: '#166534',
 
-  // Purples (admin)
+  // Purples — admin
   purple50:  '#FAF5FF',
   purple100: '#F3E8FF',
-  purple400: '#C084FC',
   purple500: '#A855F7',
   purple600: '#9333EA',
   purple700: '#7C3AED',
 
-  // Ambers (warning)
+  // Ambers — warning
   amber50:  '#FFFBEB',
   amber100: '#FEF3C7',
-  amber400: '#FBBF24',
   amber500: '#F59E0B',
   amber600: '#D97706',
 
-  // Reds (error / danger)
+  // Reds — error
   red50:  '#FFF1F2',
   red100: '#FFE4E6',
-  red400: '#F87171',
   red500: '#EF4444',
   red600: '#DC2626',
 
-  // Teals (accent)
-  teal500: '#14B8A6',
-  teal600: '#0D9488',
-
-  // Neutrals (slate)
+  // Neutrals — slate scale
   white:    '#FFFFFF',
   slate50:  '#F8FAFC',
   slate100: '#F1F5F9',
@@ -79,245 +81,384 @@ export const Palette = {
   slate700: '#334155',
   slate800: '#1E293B',
   slate900: '#0F172A',
-  black:    '#000000',
 } as const;
 
-// ─── Semantic Colors ─────────────────────────────────────────────────────────
+// ─── Semantic Color Tokens ────────────────────────────────────────────────────
 export const Colors = {
   // Brand
-  primary:        Palette.blue600,
-  primaryLight:   Palette.blue50,
-  primaryMid:     Palette.blue100,
-  primaryDark:    Palette.blue800,
-  primaryHover:   Palette.blue700,
+  primary:      Palette.blue600,
+  primaryLight: Palette.blue50,
+  primaryMid:   Palette.blue100,
+  primaryDark:  Palette.blue800,
 
-  // Employer
-  employer:       Palette.green600,
-  employerLight:  Palette.green50,
-  employerMid:    Palette.green100,
+  // Roles
+  employer:      Palette.green600,
+  employerLight: Palette.green50,
+  employerMid:   Palette.green100,
+  admin:         Palette.purple600,
+  adminLight:    Palette.purple50,
+  adminMid:      Palette.purple100,
 
-  // Admin
-  admin:          Palette.purple600,
-  adminLight:     Palette.purple50,
-  adminMid:       Palette.purple100,
+  // States
+  success:      Palette.green600,
+  successLight: Palette.green50,
+  successMid:   Palette.green100,
+  warning:      Palette.amber500,
+  warningLight: Palette.amber50,
+  warningMid:   Palette.amber100,
+  error:        Palette.red500,
+  errorLight:   Palette.red50,
+  errorMid:     Palette.red100,
+  info:         Palette.blue500,
 
-  // Semantic
-  success:        Palette.green600,
-  successLight:   Palette.green50,
-  successMid:     Palette.green100,
-  warning:        Palette.amber500,
-  warningLight:   Palette.amber50,
-  warningMid:     Palette.amber100,
-  error:          Palette.red500,
-  errorLight:     Palette.red50,
-  errorMid:       Palette.red100,
-  info:           Palette.blue500,
-  infoLight:      Palette.blue50,
+  // Surfaces
+  bg:        Palette.slate50,
+  bgCard:    Palette.white,
+  bgInput:   Palette.slate50,
+  bgOverlay: 'rgba(15,23,42,0.55)',
 
-  // Backgrounds
-  bg:             Palette.slate50,
-  bgCard:         Palette.white,
-  bgInput:        Palette.slate50,
-  bgOverlay:      'rgba(15, 23, 42, 0.5)',
-
-  // Text
-  textPrimary:    Palette.slate900,
-  textSecondary:  Palette.slate600,
-  textMuted:      Palette.slate400,
-  textInverse:    Palette.white,
-  textOnPrimary:  Palette.white,
+  // Text hierarchy
+  textPrimary:   Palette.slate900,
+  textSecondary: Palette.slate500,
+  textMuted:     Palette.slate400,
+  textInverse:   Palette.white,
+  textDisabled:  Palette.slate300,
 
   // Borders
-  border:         Palette.slate200,
-  borderFocus:    Palette.blue600,
-  borderError:    Palette.red500,
+  border:      Palette.slate200,
+  borderFocus: Palette.blue600,
+  borderError: Palette.red500,
 
-  // Misc
-  tabBarBg:       Palette.white,
-  headerBg:       Palette.white,
-  divider:        Palette.slate100,
-  skeleton:       Palette.slate200,
-  skeletonHigh:   Palette.slate100,
+  // Navigation
+  tabBarBg:  Palette.white,
+  headerBg:  Palette.white,
+  divider:   Palette.slate100,
+  skeleton:  Palette.slate200,
 } as const;
 
-// ─── Typography ──────────────────────────────────────────────────────────────
-const BASE_FONT = Platform.select({ ios: 'System', android: 'Roboto', default: 'System' });
-
+// ─── Typography ───────────────────────────────────────────────────────────────
 export const Typography = {
-  // Font families
-  fontFamily: {
-    regular:  BASE_FONT,
-    medium:   BASE_FONT,
-    semibold: BASE_FONT,
-    bold:     BASE_FONT,
-  },
+  // Scale (spec compliant: 32/28/24/18/16/14/12)
+  display:    { fontSize: 32, fontWeight: '800' as const, lineHeight: 40, letterSpacing: -0.5 },
+  h1:         { fontSize: 28, fontWeight: '700' as const, lineHeight: 36, letterSpacing: -0.3 },
+  h2:         { fontSize: 24, fontWeight: '700' as const, lineHeight: 32 },
+  h3:         { fontSize: 20, fontWeight: '600' as const, lineHeight: 28 },
+  h4:         { fontSize: 18, fontWeight: '600' as const, lineHeight: 26 },  // Card title
+  h5:         { fontSize: 16, fontWeight: '600' as const, lineHeight: 24 },
+  bodyLg:     { fontSize: 16, fontWeight: '400' as const, lineHeight: 26 },  // Body text
+  body:       { fontSize: 15, fontWeight: '400' as const, lineHeight: 24 },
+  bodySm:     { fontSize: 14, fontWeight: '400' as const, lineHeight: 22 },  // Secondary text
+  label:      { fontSize: 13, fontWeight: '500' as const, lineHeight: 20 },
+  caption:    { fontSize: 12, fontWeight: '400' as const, lineHeight: 18 },  // Caption
+  overline:   { fontSize: 11, fontWeight: '600' as const, lineHeight: 16, letterSpacing: 0.8, textTransform: 'uppercase' as const },
 
-  // Scale — 8-point based
-  size: {
-    xs:   11,
-    sm:   13,
-    base: 15,
-    md:   16,
-    lg:   18,
-    xl:   20,
-    '2xl': 24,
-    '3xl': 28,
-    '4xl': 32,
-    '5xl': 40,
-  },
-
-  weight: {
-    regular:  '400' as const,
-    medium:   '500' as const,
-    semibold: '600' as const,
-    bold:     '700' as const,
-    extrabold:'800' as const,
-  },
-
-  lineHeight: {
-    tight:   1.2,
-    snug:    1.35,
-    normal:  1.5,
-    relaxed: 1.65,
-  },
-
-  // Named roles
-  display:    { fontSize: 32, fontWeight: '700' as const, lineHeight: 38 },
-  h1:         { fontSize: 28, fontWeight: '700' as const, lineHeight: 34 },
-  h2:         { fontSize: 24, fontWeight: '700' as const, lineHeight: 30 },
-  h3:         { fontSize: 20, fontWeight: '600' as const, lineHeight: 26 },
-  h4:         { fontSize: 18, fontWeight: '600' as const, lineHeight: 24 },
-  h5:         { fontSize: 16, fontWeight: '600' as const, lineHeight: 22 },
-  bodyLg:     { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
-  body:       { fontSize: 15, fontWeight: '400' as const, lineHeight: 22 },
-  bodySm:     { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
-  label:      { fontSize: 13, fontWeight: '500' as const, lineHeight: 18 },
-  caption:    { fontSize: 12, fontWeight: '400' as const, lineHeight: 16 },
-  overline:   { fontSize: 11, fontWeight: '600' as const, lineHeight: 14, letterSpacing: 0.8, textTransform: 'uppercase' as const },
+  // UI elements
   buttonLg:   { fontSize: 17, fontWeight: '600' as const, lineHeight: 24 },
   button:     { fontSize: 15, fontWeight: '600' as const, lineHeight: 22 },
   buttonSm:   { fontSize: 13, fontWeight: '600' as const, lineHeight: 18 },
   input:      { fontSize: 16, fontWeight: '400' as const, lineHeight: 22 },
   inputLabel: { fontSize: 14, fontWeight: '500' as const, lineHeight: 20 },
+  tabLabel:   { fontSize: 11, fontWeight: '500' as const, lineHeight: 16 },
 } as const;
 
-// ─── Spacing ─────────────────────────────────────────────────────────────────
-// 4-point grid
+// ─── 8-point Spacing System ───────────────────────────────────────────────────
 export const Spacing = {
-  0:   0,
-  0.5: 2,
-  1:   4,
-  1.5: 6,
-  2:   8,
-  2.5: 10,
-  3:   12,
-  3.5: 14,
-  4:   16,
-  5:   20,
-  6:   24,
-  7:   28,
-  8:   32,
-  9:   36,
-  10:  40,
-  12:  48,
-  14:  56,
-  16:  64,
-  20:  80,
-  24:  96,
+  0:    0,
+  0.5:  2,
+  1:    4,
+  1.5:  6,
+  2:    8,    // base unit
+  2.5:  10,
+  3:    12,
+  3.5:  14,
+  4:    16,   // card padding
+  5:    20,   // page padding
+  6:    24,
+  7:    28,
+  8:    32,
+  9:    36,
+  10:   40,
+  12:   48,
+  14:   56,
+  16:   64,
+  20:   80,
+  24:   96,
 } as const;
 
-// Semantic spacing
+// Named semantic spacing — use these in screens
 export const Space = {
-  pagePadding:   Spacing[5],     // 20px horizontal page padding
-  sectionGap:    Spacing[6],     // 24px between sections
-  cardPadding:   Spacing[4],     // 16px inside cards
-  cardGap:       Spacing[3],     // 12px between cards
-  inputPaddingH: Spacing[4],     // 16px horizontal input
-  inputPaddingV: Spacing[3.5],   // 14px vertical input
-  buttonPaddingV:Spacing[4],     // 16px vertical button
-  tabBarHeight:  64,
-  headerHeight:  56,
-  bottomInset:   34,             // iPhone home indicator area
+  // Page layout
+  pagePadding:      Spacing[5],     // 20 — horizontal screen padding
+  pageTop:          Spacing[4],     // 16 — first element from safe area
+  sectionGap:       Spacing[6],     // 24 — gap between major sections
+  sectionGapSm:     Spacing[4],     // 16 — gap between minor sections
+
+  // Cards
+  cardPadding:      Spacing[4],     // 16 — inner card padding
+  cardPaddingLg:    Spacing[5],     // 20 — large card padding
+  cardGap:          Spacing[3],     // 12 — gap between cards
+  cardGapSm:        Spacing[2],     // 8  — tight card gap
+
+  // Inputs
+  inputPaddingH:    Spacing[4],     // 16
+  inputPaddingV:    Spacing[3.5],   // 14
+  inputGap:         Spacing[4],     // 16 — gap between form fields
+  formGap:          Spacing[5],     // 20 — gap between form sections
+
+  // Buttons
+  btnHeight:        52,             // standard button height
+  btnHeightSm:      40,
+  btnHeightLg:      56,
+  btnPaddingV:      Spacing[4],     // 16
+
+  // Navigation chrome
+  tabBarHeight:     64,
+  headerHeight:     56,
+  bottomInset:      34,             // iPhone home indicator
+
+  // Computed
+  listBottom:       64 + 24,        // tabBarHeight + extra breathing room
+  screenBottom:     64 + 34,        // tabBarHeight + bottomInset
 } as const;
 
-// ─── Border Radius ────────────────────────────────────────────────────────────
+// ─── Border Radius ─────────────────────────────────────────────────────────────
 export const Radius = {
   xs:   4,
   sm:   8,
   md:   12,
   lg:   16,
   xl:   20,
-  '2xl':24,
+  '2xl': 24,
+  '3xl': 32,
   full: 9999,
 } as const;
 
-// ─── Shadows ─────────────────────────────────────────────────────────────────
+// ─── Elevation / Shadows ──────────────────────────────────────────────────────
 export const Shadows = {
   none: {},
   xs: Platform.select({
-    ios:     { shadowColor: Palette.slate900, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
+    ios:     { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3 },
     android: { elevation: 1 },
-    default: { boxShadow: '0px 1px 2px rgba(15,23,42,0.05)' },
+    default: { boxShadow: '0px 1px 3px rgba(15,23,42,0.04)' },
   }),
   sm: Platform.select({
-    ios:     { shadowColor: Palette.slate900, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6 },
+    ios:     { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
     android: { elevation: 2 },
-    default: { boxShadow: '0px 2px 6px rgba(15,23,42,0.07)' },
+    default: { boxShadow: '0px 2px 8px rgba(15,23,42,0.06)' },
   }),
   md: Platform.select({
-    ios:     { shadowColor: Palette.slate900, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 12 },
+    ios:     { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16 },
     android: { elevation: 4 },
-    default: { boxShadow: '0px 4px 12px rgba(15,23,42,0.10)' },
+    default: { boxShadow: '0px 4px 16px rgba(15,23,42,0.08)' },
   }),
   lg: Platform.select({
-    ios:     { shadowColor: Palette.slate900, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 24 },
+    ios:     { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.10, shadowRadius: 24 },
     android: { elevation: 8 },
-    default: { boxShadow: '0px 8px 24px rgba(15,23,42,0.12)' },
+    default: { boxShadow: '0px 8px 24px rgba(15,23,42,0.10)' },
   }),
   xl: Platform.select({
-    ios:     { shadowColor: Palette.slate900, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 40 },
+    ios:     { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.14, shadowRadius: 40 },
     android: { elevation: 12 },
-    default: { boxShadow: '0px 12px 40px rgba(15,23,42,0.15)' },
+    default: { boxShadow: '0px 12px 40px rgba(15,23,42,0.14)' },
   }),
 } as const;
 
-// ─── Animation Durations ─────────────────────────────────────────────────────
-export const Duration = {
-  fast:    150,
-  normal:  250,
-  slow:    400,
-  slower:  600,
-} as const;
-
-// ─── Status Color Maps ────────────────────────────────────────────────────────
+// ─── Status Configs ────────────────────────────────────────────────────────────
 export const StatusConfig: Record<string, { color: string; bg: string; label: string }> = {
-  pending:    { color: Palette.amber600, bg: Palette.amber100,  label: 'Pending' },
-  reviewed:   { color: Palette.blue600,  bg: Palette.blue100,   label: 'Reviewed' },
-  shortlisted:{ color: Palette.purple600,bg: Palette.purple100, label: 'Shortlisted' },
-  accepted:   { color: Palette.green700, bg: Palette.green100,  label: 'Accepted' },
-  rejected:   { color: Palette.red600,   bg: Palette.red100,    label: 'Rejected' },
-  completed:  { color: Palette.green700, bg: Palette.green100,  label: 'Completed' },
-  withdrawn:  { color: Palette.slate500, bg: Palette.slate100,  label: 'Withdrawn' },
+  pending:     { color: Palette.amber600, bg: Palette.amber100,  label: 'Pending' },
+  reviewed:    { color: Palette.blue600,  bg: Palette.blue100,   label: 'Reviewed' },
+  shortlisted: { color: Palette.purple600,bg: Palette.purple100, label: 'Shortlisted' },
+  accepted:    { color: Palette.green700, bg: Palette.green100,  label: 'Accepted' },
+  rejected:    { color: Palette.red600,   bg: Palette.red100,    label: 'Rejected' },
+  completed:   { color: Palette.green700, bg: Palette.green100,  label: 'Completed' },
+  withdrawn:   { color: Palette.slate500, bg: Palette.slate100,  label: 'Withdrawn' },
 };
 
 export const JobStatusConfig: Record<string, { color: string; bg: string; label: string }> = {
-  active:  { color: Palette.green700, bg: Palette.green100, label: 'Active' },
-  closed:  { color: Palette.red600,   bg: Palette.red100,   label: 'Closed' },
-  draft:   { color: Palette.slate500, bg: Palette.slate100, label: 'Draft' },
-  filled:  { color: Palette.purple600,bg: Palette.purple100,label: 'Filled' },
+  active:  { color: Palette.green700, bg: Palette.green100,  label: 'Active' },
+  closed:  { color: Palette.red600,   bg: Palette.red100,    label: 'Closed' },
+  draft:   { color: Palette.slate500, bg: Palette.slate100,  label: 'Draft' },
+  filled:  { color: Palette.purple600,bg: Palette.purple100, label: 'Filled' },
 };
 
 export const VerificationConfig: Record<string, { color: string; bg: string; label: string }> = {
-  approved:{ color: Palette.green700, bg: Palette.green100, label: 'Verified' },
-  rejected:{ color: Palette.red600,   bg: Palette.red100,   label: 'Rejected' },
-  pending: { color: Palette.amber600, bg: Palette.amber100, label: 'Pending Verification' },
+  approved: { color: Palette.green700, bg: Palette.green100,  label: 'Verified' },
+  rejected: { color: Palette.red600,   bg: Palette.red100,    label: 'Rejected' },
+  pending:  { color: Palette.amber600, bg: Palette.amber100,  label: 'Pending Verification' },
 };
 
-// ─── Screen Dimensions ───────────────────────────────────────────────────────
+// ─── Animation Durations ──────────────────────────────────────────────────────
+export const Duration = {
+  fast:   150,
+  normal: 250,
+  slow:   400,
+} as const;
+
+// ─── Screen Info ──────────────────────────────────────────────────────────────
 export const Screen = {
-  width:  SCREEN_W,
-  height: SCREEN_H,
+  width:    SCREEN_W,
+  height:   SCREEN_H,
+  isXSmall,
   isSmall,
   isMedium,
   isTablet,
-};
+} as const;
+
+// ─── Global StyleSheet Helpers ────────────────────────────────────────────────
+// Reusable style fragments — spread into StyleSheet.create()
+export const G = {
+  // Screen containers
+  screen: {
+    flex: 1,
+    backgroundColor: Colors.bg,
+  },
+  screenWhite: {
+    flex: 1,
+    backgroundColor: Colors.bgCard,
+  },
+
+  // Page header (title + subtitle pair)
+  pageHeader: {
+    paddingHorizontal: Space.pagePadding,
+    paddingTop: Space.pageTop,
+    paddingBottom: Spacing[2],
+  },
+  pageTitle: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+  },
+  pageSubtitle: {
+    ...Typography.bodySm,
+    color: Colors.textSecondary,
+    marginTop: Spacing[1],
+  },
+
+  // Section
+  section: {
+    paddingHorizontal: Space.pagePadding,
+    marginTop: Space.sectionGap,
+  },
+  sectionHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: Spacing[4],
+  },
+  sectionTitle: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+  },
+  seeAllText: {
+    ...Typography.label,
+    color: Colors.primary,
+    fontWeight: '600' as const,
+  },
+
+  // Cards
+  card: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    padding: Space.cardPadding,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Space.cardGap,
+  },
+  cardLg: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.xl,
+    padding: Space.cardPaddingLg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Space.cardGap,
+  },
+
+  // Icon containers
+  iconSm: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  iconMd: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.md,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  iconLg: {
+    width: 56,
+    height: 56,
+    borderRadius: Radius.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+
+  // Row layout
+  row: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  rowBetween: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+
+  // Empty states
+  emptyCenter: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: Space.pagePadding * 2,
+    paddingVertical: 64,
+  },
+  emptyTitle: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+    textAlign: 'center' as const,
+    marginTop: Spacing[5],
+    marginBottom: Spacing[2],
+  },
+  emptyBody: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: 'center' as const,
+    lineHeight: 24,
+  },
+
+  // Bottom list padding
+  listBottom: {
+    height: Space.listBottom,
+  },
+
+  // Back button
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+
+  // Divider
+  divider: {
+    height: 1,
+    backgroundColor: Colors.divider,
+    marginVertical: Spacing[4],
+  },
+
+  // Input label
+  inputLabel: {
+    ...Typography.inputLabel,
+    color: Colors.textPrimary,
+    marginBottom: Spacing[1.5],
+  },
+  inputRequired: {
+    color: Colors.error,
+  },
+} as const;

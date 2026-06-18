@@ -1,321 +1,139 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  Image,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import {
-  Briefcase,
-  MapPin,
-  Eye,
-  Trash2,
-  ChevronRight,
-} from 'lucide-react-native';
+import { Briefcase, MapPin, Eye, Trash2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { Job } from '@/types/database';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { JobCardSkeleton } from '@/components/ui/SkeletonLoader';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Badge } from '@/components/ui/Badge';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, JobStatusConfig,
+} from '@/constants/theme';
+
+const FILTERS = [
+  { value: 'all',    label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'draft',  label: 'Draft' },
+];
 
 export default function AdminJobsScreen() {
-  const router = useRouter();
-  const [jobs, setJobs] = useState<(Job & { employer?: any })[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [jobs,       setJobs]       = useState<any[]>([]);
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [filter,     setFilter]     = useState('all');
 
-  useEffect(() => {
-    fetchJobs();
-  }, [selectedStatus]);
-
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     setLoading(true);
-
-    let query = supabase
+    let q = supabase
       .from('jobs')
-      .select(`
-        *,
-        employer:employers(company_name, company_logo_url)
-      `)
+      .select('*, employer:employers(company_name, company_logo_url)')
       .order('created_at', { ascending: false });
-
-    if (selectedStatus !== 'all') {
-      query = query.eq('status', selectedStatus);
-    }
-
-    const { data } = await query;
+    if (filter !== 'all') q = q.eq('status', filter);
+    const { data } = await q;
     if (data) setJobs(data);
     setLoading(false);
     setRefreshing(false);
+  }, [filter]);
+
+  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+
+  const deleteJob = (id: string) => {
+    Alert.alert('Delete Job', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => { await supabase.from('jobs').delete().eq('id', id); fetchJobs(); } },
+    ]);
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchJobs();
-  };
-
-  const deleteJob = async (jobId: string) => {
-    Alert.alert(
-      'Delete Job',
-      'Are you sure you want to delete this job? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await supabase.from('jobs').delete().eq('id', jobId);
-            fetchJobs();
-          },
-        },
-      ]
+  const renderItem = ({ item }: { item: any }) => {
+    const sc = JobStatusConfig[item.status] || JobStatusConfig.draft;
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardInner}>
+          <View style={styles.logo}>
+            {item.employer?.company_logo_url
+              ? <Image source={{ uri: item.employer.company_logo_url }} style={styles.logoImg} />
+              : <Briefcase color={Colors.textMuted} size={18} strokeWidth={1.8} />}
+          </View>
+          <View style={styles.info}>
+            <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+            <Text style={styles.company}>{item.employer?.company_name}</Text>
+            <View style={styles.metaRow}>
+              <MapPin color={Colors.textMuted} size={11} strokeWidth={2} />
+              <Text style={styles.metaText}>{item.city || 'Remote'}</Text>
+              <View style={styles.metaDot} />
+              <Eye color={Colors.textMuted} size={11} strokeWidth={2} />
+              <Text style={styles.metaText}>{item.view_count || 0} views</Text>
+            </View>
+          </View>
+          <Badge label={sc.label} color={sc.color} bg={sc.bg} dot size="sm" />
+        </View>
+        <View style={styles.cardFooter}>
+          <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteJob(item.id)}>
+            <Trash2 color={Colors.error} size={16} strokeWidth={2} />
+            <Text style={styles.deleteBtnText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   };
 
-  const filterButtons = [
-    { value: 'all', label: 'All' },
-    { value: 'active', label: 'Active' },
-    { value: 'closed', label: 'Closed' },
-    { value: 'draft', label: 'Draft' },
-  ];
-
-  const renderJob = ({ item }: { item: Job & { employer?: any } }) => (
-    <TouchableOpacity
-      style={styles.jobCard}
-      onPress={() => router.push(`/(admin)/jobs/${item.id}`)}
-    >
-      <View style={styles.jobCardContent}>
-        <View style={styles.jobIcon}>
-          {item.employer?.company_logo_url ? (
-            <Image source={{ uri: item.employer?.company_logo_url }} style={styles.logoImage} />
-          ) : (
-            <Briefcase color="#64748B" size={20} />
-          )}
-        </View>
-        <View style={styles.jobInfo}>
-          <Text style={styles.jobTitle} numberOfLines={1}>{item.title}</Text>
-          <Text style={styles.companyName}>{item.employer?.company_name}</Text>
-          <View style={styles.jobMeta}>
-            <MapPin color="#94A3B8" size={12} />
-            <Text style={styles.jobMetaText}>{item.city || 'Remote'}</Text>
-            <Text style={styles.jobMetaDot}>-</Text>
-            <Eye color="#94A3B8" size={12} />
-            <Text style={styles.jobMetaText}>{item.view_count || 0} views</Text>
-          </View>
-        </View>
-        <View style={[styles.statusBadge, getStatusStyle(item.status)]}>
-          <Text style={[styles.statusText, getStatusTextStyle(item.status)]}>
-            {item.status}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'active':
-        return { backgroundColor: '#D1FAE5' };
-      case 'closed':
-        return { backgroundColor: '#FEE2E2' };
-      default:
-        return { backgroundColor: '#F1F5F9' };
-    }
-  };
-
-  const getStatusTextStyle = (status: string) => {
-    switch (status) {
-      case 'active':
-        return { color: '#10B981' };
-      case 'closed':
-        return { color: '#EF4444' };
-      default:
-        return { color: '#64748B' };
-    }
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Jobs</Text>
-        <Text style={styles.headerSubtitle}>
-          {jobs.length} job{jobs.length !== 1 ? 's' : ''}
-        </Text>
+        <Text style={styles.heading}>Jobs</Text>
+        {!loading && <Text style={styles.count}>{jobs.length} job{jobs.length !== 1 ? 's' : ''}</Text>}
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        {filterButtons.map((button) => (
-          <TouchableOpacity
-            key={button.value}
-            style={[
-              styles.filterButton,
-              selectedStatus === button.value && styles.filterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus(button.value)}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                selectedStatus === button.value && styles.filterTextActive,
-              ]}
-            >
-              {button.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.filterWrap}>
+        <FlatList
+          data={FILTERS} horizontal showsHorizontalScrollIndicator={false}
+          keyExtractor={i => i.value} contentContainerStyle={styles.filterList}
+          renderItem={({ item }) => (
+            <FilterChip label={item.label} active={filter === item.value}
+              onPress={() => setFilter(item.value)} color={Colors.admin} />
+          )}
+        />
       </View>
 
-      {/* Jobs List */}
       <FlatList
-        data={jobs}
-        renderItem={renderJob}
-        keyExtractor={(item) => item.id}
+        data={jobs} renderItem={renderItem} keyExtractor={i => i.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#8B5CF6']} />
-        }
-        ListEmptyComponent={
-          loading ? undefined : (
-            <View style={styles.emptyState}>
-              <Briefcase color="#CBD5E1" size={48} />
-              <Text style={styles.emptyStateTitle}>No Jobs Found</Text>
-            </View>
-          )
-        }
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchJobs(); }} tintColor={Colors.admin} />}
+        ListHeaderComponent={loading ? <View>{[1,2,3].map(k => <JobCardSkeleton key={k} />)}</View> : null}
+        ListEmptyComponent={!loading ? (
+          <EmptyState icon={<Briefcase color={Colors.textMuted} size={40} strokeWidth={1.5} />} title="No jobs found" />
+        ) : null}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  filterButtonActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
-  },
-  listContainer: {
-    padding: 20,
-    paddingTop: 8,
-  },
-  jobCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  jobCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  jobIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    overflow: 'hidden',
-  },
-  logoImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-  },
-  jobInfo: {
-    flex: 1,
-  },
-  jobTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  companyName: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  jobMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  jobMetaText: {
-    fontSize: 12,
-    color: '#94A3B8',
-  },
-  jobMetaDot: {
-    fontSize: 12,
-    color: '#CBD5E1',
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 16,
-  },
+  container:  { ...G.screen },
+  header:     { paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3] },
+  heading:    { ...Typography.h2, color: Colors.textPrimary },
+  count:      { ...Typography.bodySm, color: Colors.textSecondary, marginTop: Spacing[0.5] },
+  filterWrap: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  filterList: { paddingHorizontal: Space.pagePadding, paddingVertical: Spacing[3], gap: Spacing[2] },
+  list:       { padding: Space.pagePadding, paddingTop: Spacing[3], paddingBottom: Space.listBottom },
+
+  card:       { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, marginBottom: Space.cardGap, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
+  cardInner:  { flexDirection: 'row', alignItems: 'center', padding: Space.cardPadding, gap: Spacing[3] },
+  logo:       { width: 44, height: 44, borderRadius: Radius.md, backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  logoImg:    { width: 44, height: 44 },
+  info:       { flex: 1, gap: Spacing[0.5] },
+  title:      { ...Typography.h5, color: Colors.textPrimary },
+  company:    { ...Typography.bodySm, color: Colors.textSecondary },
+  metaRow:    { flexDirection: 'row', alignItems: 'center', gap: Spacing[1.5], marginTop: 2 },
+  metaText:   { ...Typography.caption, color: Colors.textMuted },
+  metaDot:    { width: 3, height: 3, borderRadius: 2, backgroundColor: Colors.textMuted },
+  cardFooter: { flexDirection: 'row', justifyContent: 'flex-end', padding: Spacing[3], borderTopWidth: 1, borderTopColor: Colors.divider },
+  deleteBtn:  { flexDirection: 'row', alignItems: 'center', gap: Spacing[1.5], backgroundColor: Colors.errorLight, paddingHorizontal: Spacing[3], paddingVertical: Spacing[1.5], borderRadius: Radius.full },
+  deleteBtnText: { ...Typography.label, color: Colors.error, fontWeight: '600' },
 });

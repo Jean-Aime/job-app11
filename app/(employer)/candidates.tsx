@@ -1,375 +1,188 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import {
-  Users,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Star,
-  ChevronRight,
-  Building2,
-  Search,
-} from 'lucide-react-native';
+import { Users, ChevronRight } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { Application } from '@/types/database';
 import { useAuthStore } from '@/stores/authStore';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { JobCardSkeleton } from '@/components/ui/SkeletonLoader';
+import { EmptyState } from '@/components/ui/EmptyState';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, StatusConfig, Palette,
+} from '@/constants/theme';
 
-const statusConfig = {
-  pending: { color: '#F59E0B', icon: Clock, label: 'Pending', bgColor: '#FEF3C7' },
-  reviewed: { color: '#3B82F6', icon: Search, label: 'Reviewed', bgColor: '#DBEAFE' },
-  shortlisted: { color: '#8B5CF6', icon: Star, label: 'Shortlisted', bgColor: '#EDE9FE' },
-  accepted: { color: '#10B981', icon: CheckCircle, label: 'Accepted', bgColor: '#D1FAE5' },
-  rejected: { color: '#EF4444', icon: XCircle, label: 'Rejected', bgColor: '#FEE2E2' },
-};
+const FILTERS = [
+  { value: 'all',         label: 'All' },
+  { value: 'pending',     label: 'Pending' },
+  { value: 'shortlisted', label: 'Shortlisted' },
+  { value: 'accepted',    label: 'Accepted' },
+  { value: 'rejected',    label: 'Rejected' },
+];
 
 export default function CandidatesScreen() {
   const router = useRouter();
   const { employer } = useAuthStore();
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [applications,   setApplications]   = useState<any[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState('all');
 
-  useEffect(() => {
-    if (employer) {
-      fetchApplications();
-    }
-  }, [employer, selectedStatus]);
-
-  const fetchApplications = async () => {
+  const fetchApplications = useCallback(async () => {
     if (!employer) return;
     setLoading(true);
-
-    // First get employer's jobs
-    const { data: jobs } = await supabase
-      .from('jobs')
-      .select('id')
-      .eq('employer_id', employer.id);
-
+    const { data: jobs } = await supabase.from('jobs').select('id').eq('employer_id', employer.id);
     const jobIds = jobs?.map(j => j.id) || [];
+    if (!jobIds.length) { setApplications([]); setLoading(false); setRefreshing(false); return; }
 
-    let query = supabase
+    let q = supabase
       .from('applications')
-      .select(`
-        *,
-        job:jobs(id, title),
-        job_seeker:job_seekers(id, full_name, profile_photo_url, current_occupation, years_of_experience, city)
-      `)
+      .select('*, job:jobs(id,title), job_seeker:job_seekers(id,full_name,profile_photo_url,current_occupation,years_of_experience,city)')
       .in('job_id', jobIds)
       .order('created_at', { ascending: false });
+    if (selectedStatus !== 'all') q = q.eq('status', selectedStatus);
 
-    if (selectedStatus !== 'all') {
-      query = query.eq('status', selectedStatus);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching applications:', error);
-    } else {
-      setApplications(data || []);
-    }
-
+    const { data } = await q;
+    setApplications(data || []);
     setLoading(false);
     setRefreshing(false);
-  };
+  }, [employer?.id, selectedStatus]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchApplications();
-  };
+  useEffect(() => { fetchApplications(); }, [fetchApplications]);
+  const onRefresh = () => { setRefreshing(true); fetchApplications(); };
 
-  const updateApplicationStatus = async (appId: string, newStatus: string) => {
-    const { error } = await supabase
-      .from('applications')
-      .update({ status: newStatus })
-      .eq('id', appId);
-
-    if (!error) {
-      fetchApplications();
-    }
-  };
-
-  const filterButtons = [
-    { value: 'all', label: 'All' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'shortlisted', label: 'Shortlisted' },
-    { value: 'accepted', label: 'Accepted' },
-    { value: 'rejected', label: 'Rejected' },
-  ];
-
-  const renderApplication = ({ item }: { item: Application & any }) => {
-    const status = statusConfig[item.status as keyof typeof statusConfig] || statusConfig.pending;
-    const StatusIcon = status.icon;
-
+  const renderItem = ({ item }: { item: any }) => {
+    const sc = StatusConfig[item.status] || StatusConfig.pending;
     return (
       <TouchableOpacity
-        style={styles.applicationCard}
-        onPress={() => router.push(`/(employer)/candidates/${item.id}`)}
+        style={styles.card}
+        onPress={() => router.push(`/(employer)/candidates/${item.id}` as any)}
+        activeOpacity={0.85}
       >
-        <View style={styles.cardHeader}>
-          <View style={styles.avatar}>
-            {item.job_seeker?.profile_photo_url ? (
-              <Image source={{ uri: item.job_seeker.profile_photo_url }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarPlaceholder}>
-                {item.job_seeker?.full_name?.charAt(0) || '?'}
-              </Text>
-            )}
-          </View>
-          <View style={styles.candidateInfo}>
-            <Text style={styles.candidateName}>{item.job_seeker?.full_name}</Text>
-            <Text style={styles.jobTitle}>{item.job?.title}</Text>
-            <Text style={styles.candidateMeta}>
-              {item.job_seeker?.years_of_experience} years exp
-              {item.job_seeker?.city && ' | ' + item.job_seeker.city}
+        <View style={styles.cardTop}>
+          <Avatar uri={item.job_seeker?.profile_photo_url} name={item.job_seeker?.full_name} size="md" color={Colors.employer} />
+          <View style={styles.info}>
+            <Text style={styles.name}>{item.job_seeker?.full_name}</Text>
+            <Text style={styles.jobTitle} numberOfLines={1}>{item.job?.title}</Text>
+            <Text style={styles.meta}>
+              {item.job_seeker?.years_of_experience} yrs exp
+              {item.job_seeker?.city ? `  •  ${item.job_seeker.city}` : ''}
             </Text>
           </View>
-          <View style={styles.matchScore}>
-            <Text style={styles.matchScoreValue}>
-              {item.match_score ? Math.round(item.match_score) : '--'}%
-            </Text>
-            <Text style={styles.matchScoreLabel}>Match</Text>
-          </View>
+          {item.match_score != null && (
+            <View style={styles.matchBadge}>
+              <Text style={styles.matchPct}>{Math.round(item.match_score)}%</Text>
+              <Text style={styles.matchLbl}>Match</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.cardFooter}>
-          <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
-            <StatusIcon color={status.color} size={14} />
-            <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
-          </View>
-          <TouchableOpacity onPress={() => router.push(`/(employer)/candidates/${item.id}`)}>
-            <ChevronRight color="#94A3B8" size={20} />
-          </TouchableOpacity>
+          <Badge label={sc.label} color={sc.color} bg={sc.bg} dot size="sm" />
+          <ChevronRight color={Colors.textMuted} size={16} strokeWidth={2} />
         </View>
       </TouchableOpacity>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Candidates</Text>
-        <Text style={styles.headerSubtitle}>
-          {applications.length} application{applications.length !== 1 ? 's' : ''}
-        </Text>
+        <Text style={styles.heading}>Candidates</Text>
+        {!loading && <Text style={styles.count}>{applications.length} application{applications.length !== 1 ? 's' : ''}</Text>}
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        {filterButtons.map((button) => (
-          <TouchableOpacity
-            key={button.value}
-            style={[
-              styles.filterButton,
-              selectedStatus === button.value && styles.filterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus(button.value)}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                selectedStatus === button.value && styles.filterTextActive,
-              ]}
-            >
-              {button.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Filters */}
+      <View style={styles.filterWrap}>
+        <FlatList
+          data={FILTERS}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={i => i.value}
+          contentContainerStyle={styles.filterList}
+          renderItem={({ item }) => (
+            <FilterChip
+              label={item.label}
+              active={selectedStatus === item.value}
+              onPress={() => setSelectedStatus(item.value)}
+              color={Colors.employer}
+            />
+          )}
+        />
       </View>
 
-      {/* Applications List */}
       <FlatList
         data={applications}
-        renderItem={renderApplication}
-        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        keyExtractor={i => i.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#059669']} />
-        }
-        ListEmptyComponent={
-          loading ? null : (
-            <View style={styles.emptyState}>
-              <Users color="#CBD5E1" size={48} />
-              <Text style={styles.emptyStateTitle}>No Candidates</Text>
-              <Text style={styles.emptyStateText}>
-                {selectedStatus === 'all'
-                  ? "No applications received yet"
-                  : `No ${selectedStatus} applications`}
-              </Text>
-            </View>
-          )
-        }
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.employer} />}
+        ListHeaderComponent={loading ? <View>{[1,2,3].map(k => <JobCardSkeleton key={k} />)}</View> : null}
+        ListEmptyComponent={!loading ? (
+          <EmptyState
+            icon={<Users color={Colors.textMuted} size={40} strokeWidth={1.5} />}
+            title={selectedStatus === 'all' ? 'No candidates yet' : `No ${selectedStatus} candidates`}
+            description={selectedStatus === 'all' ? 'Applications will appear here once received' : 'Try a different filter'}
+          />
+        ) : null}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
+  container: { ...G.screen },
+
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: Space.pagePadding,
+    paddingTop: Space.pageTop,
+    paddingBottom: Spacing[3],
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+  heading: { ...Typography.h2, color: Colors.textPrimary },
+  count:   { ...Typography.bodySm, color: Colors.textSecondary, marginTop: Spacing[0.5] },
+
+  filterWrap: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  filterList: { paddingHorizontal: Space.pagePadding, paddingVertical: Spacing[3], gap: Spacing[2] },
+
+  list: { padding: Space.pagePadding, paddingTop: Spacing[3], paddingBottom: Space.listBottom },
+
+  card: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    padding: Space.cardPadding,
+    marginBottom: Space.cardGap,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Colors.border,
+    gap: Spacing[3],
   },
-  filterButtonActive: {
-    backgroundColor: '#059669',
-    borderColor: '#059669',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
-  },
-  listContainer: {
-    padding: 20,
-    paddingTop: 8,
-  },
-  applicationCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  cardHeader: {
-    flexDirection: 'row',
+  cardTop:    { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing[3] },
+  info:       { flex: 1 },
+  name:       { ...Typography.h5, color: Colors.textPrimary, marginBottom: 2 },
+  jobTitle:   { ...Typography.bodySm, color: Colors.textSecondary, marginBottom: 2 },
+  meta:       { ...Typography.caption, color: Colors.textMuted },
+  matchBadge: {
     alignItems: 'center',
+    backgroundColor: Colors.employerLight,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[1.5],
+    minWidth: 52,
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  avatarPlaceholder: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  candidateInfo: {
-    flex: 1,
-  },
-  candidateName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  jobTitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 2,
-  },
-  candidateMeta: {
-    fontSize: 13,
-    color: '#94A3B8',
-  },
-  matchScore: {
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 10,
-  },
-  matchScoreValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#059669',
-  },
-  matchScoreLabel: {
-    fontSize: 10,
-    color: '#059669',
-  },
+  matchPct: { ...Typography.h5, color: Colors.employer },
+  matchLbl: { ...Typography.caption, color: Colors.employer },
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
+    paddingTop: Spacing[3],
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 6,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
+    borderTopColor: Colors.divider,
   },
 });

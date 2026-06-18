@@ -1,566 +1,246 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  TextInput, Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import {
-  ArrowLeft,
-  Search,
-  Star,
-  Plus,
-  X,
-  Check,
-  Trash2,
-} from 'lucide-react-native';
+import { ArrowLeft, Search, Star, Plus, X, Check, Trash2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { Skill } from '@/types/database';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette,
+} from '@/constants/theme';
+
+const PROFICIENCY = ['Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert'];
 
 export default function SkillManagementScreen() {
   const router = useRouter();
   const { jobSeeker } = useAuthStore();
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [userSkills, setUserSkills] = useState<any[]>([]);
-  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [proficiency, setProficiency] = useState(3);
-  const [yearsExperience, setYearsExperience] = useState(0);
+  const [allSkills,  setAllSkills]  = useState<Skill[]>([]);
+  const [mySkills,   setMySkills]   = useState<any[]>([]);
+  const [search,     setSearch]     = useState('');
+  const [loading,    setLoading]    = useState(true);
+  const [saving,     setSaving]     = useState(false);
+  const [mode,       setMode]       = useState<'list'|'add'>('list');
+  const [selected,   setSelected]   = useState<Skill | null>(null);
+  const [prof,       setProf]       = useState(3);
+  const [years,      setYears]      = useState(0);
 
-  useEffect(() => {
-    fetchData();
-  }, [jobSeeker]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!jobSeeker) return;
-
     setLoading(true);
-
-    // Fetch all available skills
-    const { data: skillsData } = await supabase
-      .from('skills')
-      .select('*')
-      .order('name');
-
-    if (skillsData) setSkills(skillsData);
-
-    // Fetch user's current skills
-    const { data: userSkillsData } = await supabase
-      .from('job_seeker_skills')
-      .select(`
-        id,
-        proficiency_level,
-        years_of_experience,
-        skill:skills(*)
-      `)
-      .eq('job_seeker_id', jobSeeker.id);
-
-    if (userSkillsData) setUserSkills(userSkillsData);
-
+    const [{ data: all }, { data: mine }] = await Promise.all([
+      supabase.from('skills').select('*').order('name'),
+      supabase.from('job_seeker_skills').select('*, skill:skills(*)').eq('job_seeker_id', jobSeeker.id),
+    ]);
+    if (all)  setAllSkills(all);
+    if (mine) setMySkills(mine);
     setLoading(false);
-  };
+  }, [jobSeeker?.id]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const addSkill = async () => {
-    if (!jobSeeker || !selectedSkill) return;
-
-    // Check if skill already exists
-    const exists = userSkills.some((us: any) => us.skill?.id === selectedSkill.id);
-    if (exists) {
-      Alert.alert('Error', 'This skill is already added to your profile');
+    if (!jobSeeker || !selected) return;
+    if (mySkills.some((s: any) => s.skill?.id === selected.id)) {
+      Alert.alert('Already added', 'This skill is already on your profile.');
       return;
     }
-
     setSaving(true);
-    const { error } = await supabase.from('job_seeker_skills').insert({
-      job_seeker_id: jobSeeker.id,
-      skill_id: selectedSkill.id,
-      proficiency_level: proficiency,
-      years_of_experience: yearsExperience,
-    });
-
+    await supabase.from('job_seeker_skills').insert({ job_seeker_id: jobSeeker.id, skill_id: selected.id, proficiency_level: prof, years_of_experience: years });
     setSaving(false);
-    if (error) {
-      Alert.alert('Error', 'Failed to add skill');
-    } else {
-      setShowAddModal(false);
-      setSelectedSkill(null);
-      setProficiency(3);
-      setYearsExperience(0);
-      fetchData();
-    }
+    setMode('list'); setSelected(null); setProf(3); setYears(0); setSearch('');
+    fetchData();
   };
 
-  const removeSkill = async (userSkillId: string) => {
-    Alert.alert('Remove Skill', 'Are you sure you want to remove this skill?', [
+  const removeSkill = (id: string) => {
+    Alert.alert('Remove Skill', 'Remove this skill from your profile?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          const { error } = await supabase
-            .from('job_seeker_skills')
-            .delete()
-            .eq('id', userSkillId);
-
-          if (error) {
-            Alert.alert('Error', 'Failed to remove skill');
-          } else {
-            fetchData();
-          }
-        },
-      },
+      { text: 'Remove', style: 'destructive', onPress: async () => { await supabase.from('job_seeker_skills').delete().eq('id', id); fetchData(); } },
     ]);
   };
 
-  const filteredSkills = skills.filter((skill) =>
-    skill.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const availableSkills = filteredSkills.filter(
-    (skill) => !userSkills.some((us: any) => us.skill?.id === skill.id)
-  );
-
-  const proficiencyLabels = ['Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert'];
-
-  const renderUserSkill = ({ item }: { item: any }) => (
-    <View style={styles.userSkillCard}>
-      <View style={styles.userSkillInfo}>
-        <Text style={styles.skillName}>{item.skill?.name}</Text>
-        <View style={styles.skillMeta}>
-          <Star color="#F59E0B" size={14} />
-          <Text style={styles.skillMetaText}>
-            {proficiencyLabels[item.proficiency_level - 1]}
-          </Text>
-          {item.years_of_experience > 0 && (
-            <>
-              <Text style={styles.skillMetaDot}>-</Text>
-              <Text style={styles.skillMetaText}>
-                {item.years_of_experience} year{item.years_of_experience !== 1 ? 's' : ''}
-              </Text>
-            </>
-          )}
-        </View>
-      </View>
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={() => removeSkill(item.id)}
-      >
-        <Trash2 color="#EF4444" size={18} />
-      </TouchableOpacity>
-    </View>
-  );
+  const available = allSkills
+    .filter(s => !mySkills.some((m: any) => m.skill?.id === s.id))
+    .filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft color="#1E293B" size={24} />
+      <View style={styles.navBar}>
+        <TouchableOpacity style={G.backBtn} onPress={() => mode === 'add' ? setMode('list') : router.back()}>
+          <ArrowLeft color={Colors.textPrimary} size={20} strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Manage Skills</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowAddModal(true)}
-        >
-          <Plus color="#2563EB" size={24} />
-        </TouchableOpacity>
+        <Text style={styles.navTitle}>{mode === 'add' ? 'Add Skill' : 'My Skills'}</Text>
+        {mode === 'list' && (
+          <TouchableOpacity style={styles.addBtn} onPress={() => setMode('add')}>
+            <Plus color={Palette.white} size={18} strokeWidth={2.5} />
+          </TouchableOpacity>
+        )}
+        {mode === 'add' && <View style={{ width: 40 }} />}
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2563EB" />
-        </View>
-      ) : showAddModal ? (
-        <View style={styles.modal}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add Skill</Text>
-            <TouchableOpacity onPress={() => setShowAddModal(false)}>
-              <X color="#64748B" size={24} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Search Skills */}
-          <View style={styles.searchContainer}>
-            <Search color="#94A3B8" size={20} />
+      {mode === 'list' ? (
+        <>
+          {loading ? (
+            <View style={G.emptyCenter}><ActivityIndicator color={Colors.primary} /></View>
+          ) : (
+            <FlatList
+              data={mySkills}
+              keyExtractor={i => i.id}
+              contentContainerStyle={styles.list}
+              ListHeaderComponent={<Text style={styles.listCount}>{mySkills.length} skill{mySkills.length !== 1 ? 's' : ''}</Text>}
+              renderItem={({ item }) => (
+                <View style={styles.skillCard}>
+                  <View style={styles.skillCardLeft}>
+                    <Text style={styles.skillName}>{item.skill?.name}</Text>
+                    <View style={styles.skillMeta}>
+                      <Star color={Colors.warning} size={12} fill={Colors.warning} />
+                      <Text style={styles.skillMetaText}>{PROFICIENCY[(item.proficiency_level || 3) - 1]}</Text>
+                      {item.years_of_experience > 0 && (
+                        <>
+                          <Text style={styles.dot}>·</Text>
+                          <Text style={styles.skillMetaText}>{item.years_of_experience} yr{item.years_of_experience !== 1 ? 's' : ''}</Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+                  <TouchableOpacity style={styles.removeBtn} onPress={() => removeSkill(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Trash2 color={Colors.error} size={17} strokeWidth={2} />
+                  </TouchableOpacity>
+                </View>
+              )}
+              ListEmptyComponent={
+                <View style={G.emptyCenter}>
+                  <Star color={Colors.textMuted} size={40} strokeWidth={1.5} />
+                  <Text style={G.emptyTitle}>No skills yet</Text>
+                  <Text style={G.emptyBody}>Tap + to add skills to your profile</Text>
+                </View>
+              }
+            />
+          )}
+        </>
+      ) : (
+        <View style={{ flex: 1 }}>
+          {/* Search */}
+          <View style={styles.searchWrap}>
+            <Search color={Colors.textMuted} size={17} strokeWidth={2.5} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search skills..."
-              placeholderTextColor="#94A3B8"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
+              placeholder="Search skills…"
+              placeholderTextColor={Colors.textMuted}
+              value={search}
+              onChangeText={setSearch}
+              autoFocus
             />
-          </View>
-
-          {/* Skill Selection */}
-          <View style={styles.skillGrid}>
-            {availableSkills.slice(0, 12).map((skill) => (
-              <TouchableOpacity
-                key={skill.id}
-                style={[
-                  styles.skillChip,
-                  selectedSkill?.id === skill.id && styles.skillChipSelected,
-                ]}
-                onPress={() => setSelectedSkill(skill)}
-              >
-                <Text
-                  style={[
-                    styles.skillChipText,
-                    selectedSkill?.id === skill.id && styles.skillChipTextSelected,
-                  ]}
-                >
-                  {skill.name}
-                </Text>
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X color={Colors.textMuted} size={16} strokeWidth={2} />
               </TouchableOpacity>
-            ))}
+            )}
           </View>
 
-          {selectedSkill && (
-            <View style={styles.proficiencySection}>
-              <Text style={styles.sectionLabel}>Proficiency Level</Text>
-              <View style={styles.proficiencyOptions}>
-                {proficiencyLabels.map((label, index) => (
+          {/* Skill grid */}
+          <FlatList
+            data={available}
+            keyExtractor={i => i.id}
+            contentContainerStyle={styles.addList}
+            numColumns={2}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.skillChip, selected?.id === item.id && styles.skillChipActive]}
+                onPress={() => setSelected(selected?.id === item.id ? null : item)}
+              >
+                <Text style={[styles.chipText, selected?.id === item.id && styles.chipTextActive]} numberOfLines={1}>{item.name}</Text>
+              </TouchableOpacity>
+            )}
+          />
+
+          {/* Proficiency & years */}
+          {selected && (
+            <View style={styles.configPanel}>
+              <Text style={styles.configTitle}>Configure: {selected.name}</Text>
+
+              <Text style={styles.configLabel}>Proficiency Level</Text>
+              <View style={styles.profRow}>
+                {PROFICIENCY.map((p, i) => (
                   <TouchableOpacity
-                    key={label}
-                    style={[
-                      styles.proficiencyOption,
-                      proficiency === index + 1 && styles.proficiencyOptionSelected,
-                    ]}
-                    onPress={() => setProficiency(index + 1)}
+                    key={p}
+                    style={[styles.profChip, prof === i + 1 && styles.profChipActive]}
+                    onPress={() => setProf(i + 1)}
                   >
-                    <Text
-                      style={[
-                        styles.proficiencyOptionText,
-                        proficiency === index + 1 && styles.proficiencyOptionTextSelected,
-                      ]}
-                    >
-                      {label}
-                    </Text>
+                    <Text style={[styles.profText, prof === i + 1 && styles.profTextActive]}>{p}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={styles.sectionLabel}>Years of Experience</Text>
-              <View style={styles.yearsInput}>
-                <TouchableOpacity
-                  style={styles.yearButton}
-                  onPress={() => setYearsExperience(Math.max(0, yearsExperience - 1))}
-                >
-                  <Text style={styles.yearButtonText}>-</Text>
+              <Text style={styles.configLabel}>Years of Experience</Text>
+              <View style={styles.yearsRow}>
+                <TouchableOpacity style={styles.yearBtn} onPress={() => setYears(Math.max(0, years - 1))}>
+                  <Text style={styles.yearBtnText}>−</Text>
                 </TouchableOpacity>
-                <Text style={styles.yearsValue}>{yearsExperience}</Text>
-                <TouchableOpacity
-                  style={styles.yearButton}
-                  onPress={() => setYearsExperience(yearsExperience + 1)}
-                >
-                  <Text style={styles.yearButtonText}>+</Text>
+                <Text style={styles.yearsVal}>{years}</Text>
+                <TouchableOpacity style={styles.yearBtn} onPress={() => setYears(years + 1)}>
+                  <Text style={styles.yearBtnText}>+</Text>
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={addSkill}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
+              <TouchableOpacity style={styles.saveBtn} onPress={addSkill} disabled={saving}>
+                {saving ? <ActivityIndicator color={Palette.white} /> : (
                   <>
-                    <Check color="#FFFFFF" size={20} />
-                    <Text style={styles.saveButtonText}>Add Skill</Text>
+                    <Check color={Palette.white} size={18} strokeWidth={2.5} />
+                    <Text style={styles.saveBtnText}>Add Skill</Text>
                   </>
                 )}
               </TouchableOpacity>
             </View>
           )}
         </View>
-      ) : (
-        <>
-          <Text style={styles.subtitle}>
-            {userSkills.length} skill{userSkills.length !== 1 ? 's' : ''} added
-          </Text>
-
-          <FlatList
-            data={userSkills}
-            renderItem={renderUserSkill}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContainer}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Star color="#CBD5E1" size={48} />
-                <Text style={styles.emptyStateTitle}>No Skills Added</Text>
-                <Text style={styles.emptyStateText}>
-                  Add your skills to improve job matches
-                </Text>
-                <TouchableOpacity
-                  style={styles.emptyButton}
-                  onPress={() => setShowAddModal(true)}
-                >
-                  <Plus color="#FFFFFF" size={20} />
-                  <Text style={styles.emptyButtonText}>Add Your First Skill</Text>
-                </TouchableOpacity>
-              </View>
-            }
-          />
-        </>
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  addButton: {
-    padding: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listContainer: {
-    padding: 20,
-    paddingTop: 0,
-  },
-  userSkillCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  userSkillInfo: {
-    flex: 1,
-  },
-  skillName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  skillMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  skillMetaText: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  skillMetaDot: {
-    fontSize: 13,
-    color: '#CBD5E1',
-  },
-  removeButton: {
-    padding: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 48,
-    paddingHorizontal: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  emptyButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  modal: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    margin: 20,
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1E293B',
-  },
-  skillGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  skillChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  skillChipSelected: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
-  },
-  skillChipText: {
-    fontSize: 14,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  skillChipTextSelected: {
-    color: '#2563EB',
-  },
-  proficiencySection: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    marginTop: 20,
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 10,
-  },
-  proficiencyOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
-  },
-  proficiencyOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-  },
-  proficiencyOptionSelected: {
-    backgroundColor: '#2563EB',
-  },
-  proficiencyOptionText: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  proficiencyOptionTextSelected: {
-    color: '#FFFFFF',
-  },
-  yearsInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-  },
-  yearButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  yearButtonText: {
-    fontSize: 24,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  yearsValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1E293B',
-    minWidth: 60,
-    textAlign: 'center',
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 24,
-    backgroundColor: '#2563EB',
-    paddingVertical: 16,
-    borderRadius: 12,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  container: { ...G.screen },
+  navBar:    { ...G.rowBetween, paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3], backgroundColor: Colors.bgCard, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  navTitle:  { ...Typography.h5, color: Colors.textPrimary },
+  addBtn:    { width: 36, height: 36, borderRadius: Radius.md, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+
+  list:       { padding: Space.pagePadding, paddingBottom: Space.listBottom },
+  listCount:  { ...Typography.bodySm, color: Colors.textSecondary, marginBottom: Spacing[3] },
+
+  skillCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: Space.cardPadding, marginBottom: Space.cardGap, borderWidth: 1, borderColor: Colors.border },
+  skillCardLeft: { flex: 1 },
+  skillName:     { ...Typography.h5, color: Colors.textPrimary, marginBottom: 4 },
+  skillMeta:     { flexDirection: 'row', alignItems: 'center', gap: Spacing[1.5] },
+  skillMetaText: { ...Typography.caption, color: Colors.textMuted },
+  dot:           { ...Typography.caption, color: Colors.textMuted },
+  removeBtn:     { width: 36, height: 36, borderRadius: Radius.md, backgroundColor: Colors.errorLight, alignItems: 'center', justifyContent: 'center' },
+
+  searchWrap:  { flexDirection: 'row', alignItems: 'center', margin: Space.pagePadding, backgroundColor: Colors.bgCard, borderRadius: Radius.lg, borderWidth: 1.5, borderColor: Colors.border, paddingHorizontal: Spacing[4], paddingVertical: Spacing[3], gap: Spacing[2.5] },
+  searchInput: { flex: 1, ...Typography.body, color: Colors.textPrimary, padding: 0 },
+
+  addList:     { paddingHorizontal: Space.pagePadding, paddingBottom: Spacing[6] },
+  skillChip:   { flex: 1, margin: Spacing[1], paddingHorizontal: Spacing[3], paddingVertical: Spacing[2.5], borderRadius: Radius.full, backgroundColor: Colors.bgCard, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' },
+  skillChipActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primary },
+  chipText:        { ...Typography.label, color: Colors.textSecondary },
+  chipTextActive:  { color: Colors.primary, fontWeight: '600' },
+
+  configPanel: { backgroundColor: Colors.bgCard, borderTopWidth: 1, borderTopColor: Colors.border, padding: Space.pagePadding, gap: Spacing[4] },
+  configTitle: { ...Typography.h5, color: Colors.textPrimary },
+  configLabel: { ...Typography.label, color: Colors.textSecondary },
+  profRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing[2] },
+  profChip:    { paddingHorizontal: Spacing[3], paddingVertical: Spacing[1.5], borderRadius: Radius.full, backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border },
+  profChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  profText:    { ...Typography.label, color: Colors.textSecondary },
+  profTextActive: { color: Palette.white, fontWeight: '600' },
+  yearsRow:    { flexDirection: 'row', alignItems: 'center', gap: Spacing[5], alignSelf: 'center' },
+  yearBtn:     { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
+  yearBtnText: { ...Typography.h3, color: Colors.textSecondary },
+  yearsVal:    { ...Typography.display, color: Colors.textPrimary, minWidth: 48, textAlign: 'center' },
+  saveBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing[2], height: 52, backgroundColor: Colors.primary, borderRadius: Radius.lg },
+  saveBtnText: { ...Typography.button, color: Palette.white },
 });

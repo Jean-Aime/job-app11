@@ -3,41 +3,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { AlertTriangle, Home } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette,
+} from '@/constants/theme';
 
 export default function NotFoundScreen() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
 
-  const handleGoHome = () => {
-    if (!isAuthenticated || !user) {
-      router.replace('/(auth)');
-      return;
-    }
-    switch (user.role) {
-      case 'admin':
-        router.replace('/(admin)');
-        break;
-      case 'employer':
-        router.replace('/(employer)');
-        break;
-      default:
-        router.replace('/(job-seeker)');
-    }
+  const goHome = () => {
+    if (!isAuthenticated || !user) { router.replace('/(auth)'); return; }
+    if (user.role === 'admin')    router.replace('/(admin)');
+    else if (user.role === 'employer') router.replace('/(employer)');
+    else router.replace('/(job-seeker)');
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <AlertTriangle color="#F59E0B" size={64} />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={G.emptyCenter}>
+        <View style={styles.iconWrap}>
+          <AlertTriangle color={Colors.warning} size={56} strokeWidth={1.5} />
         </View>
         <Text style={styles.title}>Page Not Found</Text>
-        <Text style={styles.subtitle}>
+        <Text style={styles.body}>
           The screen you're looking for doesn't exist or has been moved.
         </Text>
-        <TouchableOpacity style={styles.button} onPress={handleGoHome}>
-          <Home color="#FFFFFF" size={20} />
-          <Text style={styles.buttonText}>Go Home</Text>
+        <TouchableOpacity style={styles.btn} onPress={goHome} activeOpacity={0.85}>
+          <Home color={Palette.white} size={20} strokeWidth={2} />
+          <Text style={styles.btnText}>Go Home</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -45,51 +38,20 @@ export default function NotFoundScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
+  container: { ...G.screen },
+  iconWrap: {
+    width: 112, height: 112, borderRadius: 56,
+    backgroundColor: Colors.warningLight,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: Spacing[6],
   },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
+  title: { ...Typography.h1, color: Colors.textPrimary, textAlign: 'center', marginBottom: Spacing[3] },
+  body:  { ...Typography.bodyLg, color: Colors.textSecondary, textAlign: 'center', lineHeight: 26, marginBottom: Spacing[8] },
+  btn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing[2],
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing[8], paddingVertical: Spacing[4],
+    borderRadius: Radius.lg,
   },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#FEF3C7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 40,
-  },
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 14,
-  },
-  buttonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  btnText: { ...Typography.buttonLg, color: Palette.white },
 });

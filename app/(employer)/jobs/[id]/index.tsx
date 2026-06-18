@@ -1,348 +1,219 @@
 import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-  ArrowLeft,
-  Briefcase,
-  MapPin,
-  DollarSign,
-  Users,
-  Clock,
-  Calendar,
-  Edit3,
-  Trash2,
-  Eye,
-  Pause,
-  Play,
-  FileText,
-  ChevronRight,
-  CheckCircle,
-  XCircle,
+  ArrowLeft, Briefcase, MapPin, DollarSign, Users, Calendar,
+  Edit3, Trash2, Pause, Play, ChevronRight,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-
-interface JobDetails {
-  id: string;
-  title: string;
-  description: string;
-  status: string;
-  employment_type: string;
-  required_experience_years: number;
-  salary_min: number | null;
-  salary_max: number | null;
-  salary_currency: string;
-  city: string | null;
-  country: string | null;
-  is_remote: boolean;
-  positions_available: number;
-  created_at: string;
-  category: { name: string } | null;
-  applications: Array<{
-    id: string;
-    status: string;
-    match_score: number | null;
-    created_at: string;
-    job_seeker: {
-      id: string;
-      full_name: string;
-      profile_photo_url: string | null;
-      current_occupation: string | null;
-      city: string | null;
-    };
-  }>;
-}
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { JobCardSkeleton } from '@/components/ui/SkeletonLoader';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, JobStatusConfig, StatusConfig, Palette,
+} from '@/constants/theme';
+import { formatSalary, formatDate } from '@/utils/formatters';
 
 export default function EmployerJobDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
-  const [job, setJob] = useState<JobDetails | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { id }  = useLocalSearchParams();
+  const [job,      setJob]      = useState<any>(null);
+  const [loading,  setLoading]  = useState(true);
 
-  useEffect(() => {
-    fetchJob();
-  }, [id]);
+  useEffect(() => { fetchJob(); }, [id]);
 
   const fetchJob = async () => {
-    if (!id) return;
-
     setLoading(true);
     const { data, error } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        category:job_categories(name),
-        applications(
-          id,
-          status,
-          match_score,
-          created_at,
-          job_seeker:job_seekers(
-            id,
-            full_name,
-            profile_photo_url,
-            current_occupation,
-            city
-          )
-        )
-      `)
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      console.error('Error fetching job:', error);
-      Alert.alert('Error', 'Failed to load job details');
-      router.back();
-    } else {
-      setJob(data as unknown as JobDetails);
-    }
+      .select(`*, category:job_categories(name),
+        applications(id, status, match_score, created_at,
+          job_seeker:job_seekers(id, full_name, profile_photo_url, current_occupation, city))`)
+      .eq('id', id).single();
+    if (error) { Alert.alert('Error', 'Failed to load job'); router.back(); return; }
+    setJob(data);
     setLoading(false);
   };
 
-  const toggleJobStatus = async () => {
-    if (!job) return;
-    const newStatus = job.status === 'active' ? 'closed' : 'active';
-    const { error } = await supabase
-      .from('jobs')
-      .update({ status: newStatus })
-      .eq('id', job.id);
-
-    if (error) {
-      Alert.alert('Error', 'Failed to update job status');
-    } else {
-      setJob({ ...job, status: newStatus });
-    }
+  const toggleStatus = async () => {
+    const next = job.status === 'active' ? 'closed' : 'active';
+    await supabase.from('jobs').update({ status: next }).eq('id', id);
+    setJob({ ...job, status: next });
   };
 
-  const deleteJob = async () => {
-    Alert.alert(
-      'Delete Job',
-      'Are you sure? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase.from('jobs').delete().eq('id', id);
-            if (error) {
-              Alert.alert('Error', 'Failed to delete job');
-            } else {
-              router.back();
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return '#10B981';
-      case 'closed': return '#EF4444';
-      case 'accepted': return '#10B981';
-      case 'rejected': return '#EF4444';
-      case 'shortlisted': return '#8B5CF6';
-      case 'pending': return '#F59E0B';
-      default: return '#64748B';
-    }
+  const deleteJob = () => {
+    Alert.alert('Delete Job', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        await supabase.from('jobs').delete().eq('id', id);
+        router.back();
+      }},
+    ]);
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.navBar}>
+          <TouchableOpacity style={G.backBtn} onPress={() => router.back()}>
+            <ArrowLeft color={Colors.textPrimary} size={20} strokeWidth={2} />
+          </TouchableOpacity>
+          <Text style={styles.navTitle}>Job Details</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={{ padding: Space.pagePadding }}>
+          <JobCardSkeleton />
+          <JobCardSkeleton />
         </View>
       </SafeAreaView>
     );
   }
-
   if (!job) return null;
 
-  const pendingCount = job.applications.filter(a => a.status === 'pending').length;
-  const shortlistedCount = job.applications.filter(a => a.status === 'shortlisted').length;
+  const sc  = JobStatusConfig[job.status]  || JobStatusConfig.draft;
+  const apps = job.applications || [];
+  const pending     = apps.filter((a: any) => a.status === 'pending').length;
+  const shortlisted = apps.filter((a: any) => a.status === 'shortlisted').length;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft color="#1E293B" size={24} />
+      <View style={styles.navBar}>
+        <TouchableOpacity style={G.backBtn} onPress={() => router.back()}>
+          <ArrowLeft color={Colors.textPrimary} size={20} strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Job Details</Text>
-        <TouchableOpacity onPress={() => router.push(`/(employer)/jobs/${id}/edit`)}>
-          <Edit3 color="#059669" size={22} />
+        <Text style={styles.navTitle}>Job Details</Text>
+        <TouchableOpacity
+          style={styles.editBtn}
+          onPress={() => router.push(`/(employer)/jobs/${id}/edit` as any)}
+        >
+          <Edit3 color={Colors.employer} size={18} strokeWidth={2} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Job Info Card */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {/* Job card */}
         <View style={styles.jobCard}>
           <View style={styles.jobHeader}>
-            <View style={styles.jobIcon}>
-              <Briefcase color="#059669" size={24} />
+            <View style={[G.iconLg, { backgroundColor: Colors.employerLight }]}>
+              <Briefcase color={Colors.employer} size={24} strokeWidth={2} />
             </View>
-            <View style={styles.jobTitleSection}>
+            <View style={styles.jobHeaderInfo}>
               <Text style={styles.jobTitle}>{job.title}</Text>
-              <Text style={styles.categoryName}>{job.category?.name || 'Uncategorized'}</Text>
+              <Text style={styles.jobCategory}>{job.category?.name || 'Uncategorized'}</Text>
             </View>
           </View>
+          <Badge label={sc.label} color={sc.color} bg={sc.bg} dot />
 
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(job.status) + '20' }]}>
-            <View style={[styles.statusDot, { backgroundColor: getStatusColor(job.status) }]} />
-            <Text style={[styles.statusText, { color: getStatusColor(job.status) }]}>
-              {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-            </Text>
+          <View style={styles.jobMeta}>
+            {[
+              { icon: MapPin,    val: job.is_remote ? 'Remote' : [job.city, job.country].filter(Boolean).join(', ') || 'TBD' },
+              { icon: Users,     val: `${job.positions_available} position${job.positions_available !== 1 ? 's' : ''}` },
+              { icon: Calendar,  val: `${job.required_experience_years}+ yrs exp` },
+            ].map(({ icon: Icon, val }, i) => (
+              <View key={i} style={styles.metaRow}>
+                <Icon color={Colors.textMuted} size={14} strokeWidth={2} />
+                <Text style={styles.metaText}>{val}</Text>
+              </View>
+            ))}
+            {(job.salary_min || job.salary_max) && (
+              <View style={styles.metaRow}>
+                <DollarSign color={Colors.employer} size={14} strokeWidth={2} />
+                <Text style={[styles.metaText, { color: Colors.employer, fontWeight: '600' }]}>
+                  {formatSalary(job.salary_min, job.salary_max, job.salary_currency)}
+                </Text>
+              </View>
+            )}
           </View>
-
-          <View style={styles.infoGrid}>
-            <View style={styles.infoItem}>
-              <MapPin color="#64748B" size={18} />
-              <Text style={styles.infoText}>
-                {job.is_remote ? 'Remote' : [job.city, job.country].filter(Boolean).join(', ') || 'Location TBD'}
-              </Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Clock color="#64748B" size={18} />
-              <Text style={styles.infoText}>
-                {job.employment_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-              </Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Users color="#64748B" size={18} />
-              <Text style={styles.infoText}>{job.positions_available} position(s)</Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Calendar color="#64748B" size={18} />
-              <Text style={styles.infoText}>
-                {job.required_experience_years}+ years exp
-              </Text>
-            </View>
-          </View>
-
-          {job.salary_min && (
-            <View style={styles.salarySection}>
-              <DollarSign color="#059669" size={18} />
-              <Text style={styles.salaryText}>
-                {job.salary_currency} {job.salary_min.toLocaleString()}
-                {job.salary_max && ` - ${job.salary_max.toLocaleString()}`}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.dateSection}>
-            <Text style={styles.dateText}>Posted {formatDate(job.created_at)}</Text>
-          </View>
+          <Text style={styles.postedDate}>Posted {formatDate(job.created_at)}</Text>
         </View>
 
-        {/* Quick Stats */}
+        {/* Stats row */}
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{job.applications.length}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{pendingCount}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{shortlistedCount}</Text>
-            <Text style={styles.statLabel}>Shortlisted</Text>
+          {[
+            { label: 'Total',       value: apps.length },
+            { label: 'Pending',     value: pending },
+            { label: 'Shortlisted', value: shortlisted },
+          ].map((s, i) => (
+            <View key={s.label} style={[styles.statCard, i > 0 && { borderLeftWidth: 1, borderLeftColor: Colors.border }]}>
+              <Text style={styles.statValue}>{s.value}</Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Description */}
+        <View style={styles.section}>
+          <Text style={G.sectionTitle}>Description</Text>
+          <View style={styles.descCard}>
+            <Text style={styles.descText}>{job.description}</Text>
           </View>
         </View>
 
-        {/* Job Description */}
+        {/* Applications */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Description</Text>
-          <Text style={styles.descriptionText}>{job.description}</Text>
-        </View>
-
-        {/* Applications List */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Applications ({job.applications.length})</Text>
-            <TouchableOpacity onPress={() => router.push('/(employer)/candidates')}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
+          <View style={G.sectionHeader}>
+            <Text style={G.sectionTitle}>Applications ({apps.length})</Text>
+            {apps.length > 0 && (
+              <TouchableOpacity onPress={() => router.push('/(employer)/candidates' as any)}>
+                <Text style={G.seeAllText}>View All →</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {job.applications.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Users color="#CBD5E1" size={48} />
-              <Text style={styles.emptyText}>No applications yet</Text>
+          {apps.length === 0 ? (
+            <View style={styles.emptyApps}>
+              <Users color={Colors.textMuted} size={32} strokeWidth={1.5} />
+              <Text style={styles.emptyAppsText}>No applications yet</Text>
             </View>
           ) : (
-            job.applications.slice(0, 5).map((app) => (
-              <TouchableOpacity
-                key={app.id}
-                style={styles.applicationCard}
-                onPress={() => router.push(`/(employer)/candidates/${app.id}`)}
-              >
-                <View style={styles.applicationMain}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {app.job_seeker.full_name?.charAt(0) || '?'}
-                    </Text>
+            apps.slice(0, 5).map((app: any) => {
+              const asc = StatusConfig[app.status] || StatusConfig.pending;
+              return (
+                <TouchableOpacity
+                  key={app.id}
+                  style={styles.appRow}
+                  onPress={() => router.push(`/(employer)/candidates/${app.id}` as any)}
+                  activeOpacity={0.85}
+                >
+                  <Avatar uri={app.job_seeker?.profile_photo_url} name={app.job_seeker?.full_name} size="sm" color={Colors.employer} />
+                  <View style={styles.appInfo}>
+                    <Text style={styles.appName}>{app.job_seeker?.full_name}</Text>
+                    <Text style={styles.appMeta}>{app.job_seeker?.current_occupation || app.job_seeker?.city || 'Applicant'}</Text>
                   </View>
-                  <View style={styles.applicationInfo}>
-                    <Text style={styles.applicantName}>{app.job_seeker.full_name}</Text>
-                    <Text style={styles.applicantMeta}>
-                      {app.job_seeker.current_occupation || app.job_seeker.city || 'Job Seeker'}
-                    </Text>
-                  </View>
-                  {app.match_score && (
+                  {app.match_score != null && (
                     <View style={styles.matchBadge}>
-                      <Text style={styles.matchScore}>{Math.round(app.match_score)}%</Text>
+                      <Text style={styles.matchText}>{Math.round(app.match_score)}%</Text>
                     </View>
                   )}
-                </View>
-                <ChevronRight color="#94A3B8" size={20} />
-              </TouchableOpacity>
-            ))
+                  <ChevronRight color={Colors.textMuted} size={16} strokeWidth={2} />
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
 
-        <View style={styles.bottomPadding} />
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Footer Actions */}
+      {/* Footer actions */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.footerButton, job.status === 'active' ? styles.pauseButton : styles.startButton]}
-          onPress={toggleJobStatus}
+          style={[styles.footerBtn, { backgroundColor: job.status === 'active' ? Colors.warningLight : Colors.successLight }]}
+          onPress={toggleStatus}
         >
-          {job.status === 'active' ? (
-            <>
-              <Pause color="#F59E0B" size={18} />
-              <Text style={styles.pauseButtonText}>Close</Text>
-            </>
-          ) : (
-            <>
-              <Play color="#10B981" size={18} />
-              <Text style={styles.startButtonText}>Activate</Text>
-            </>
-          )}
+          {job.status === 'active'
+            ? <><Pause color={Colors.warning} size={16} strokeWidth={2} /><Text style={[styles.footerBtnText, { color: Colors.warning }]}>Close</Text></>
+            : <><Play  color={Colors.success} size={16} strokeWidth={2} /><Text style={[styles.footerBtnText, { color: Colors.success }]}>Activate</Text></>
+          }
         </TouchableOpacity>
-        <TouchableOpacity style={styles.deleteButton} onPress={deleteJob}>
-          <Trash2 color="#EF4444" size={18} />
-          <Text style={styles.deleteButtonText}>Delete</Text>
+        <TouchableOpacity style={[styles.footerBtn, { backgroundColor: Colors.errorLight }]} onPress={deleteJob}>
+          <Trash2 color={Colors.error} size={16} strokeWidth={2} />
+          <Text style={[styles.footerBtnText, { color: Colors.error }]}>Delete</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -350,299 +221,42 @@ export default function EmployerJobDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  jobCard: {
-    backgroundColor: '#FFFFFF',
-    margin: 20,
-    marginBottom: 16,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  jobHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  jobIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#ECFDF5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  jobTitleSection: {
-    flex: 1,
-  },
-  jobTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  categoryName: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 6,
-    marginBottom: 18,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  infoGrid: {
-    gap: 12,
-    marginBottom: 16,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  infoText: {
-    fontSize: 15,
-    color: '#475569',
-  },
-  salarySection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    marginBottom: 8,
-  },
-  salaryText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#059669',
-  },
-  dateSection: {
-    paddingTop: 8,
-  },
-  dateText: {
-    fontSize: 13,
-    color: '#94A3B8',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 20,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  statLabel: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 12,
-  },
-  viewAllText: {
-    fontSize: 14,
-    color: '#059669',
-    fontWeight: '500',
-  },
-  descriptionText: {
-    fontSize: 15,
-    color: '#475569',
-    lineHeight: 24,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  emptyText: {
-    fontSize: 15,
-    color: '#94A3B8',
-    marginTop: 10,
-  },
-  applicationCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  applicationMain: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  applicationInfo: {
-    flex: 1,
-  },
-  applicantName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  applicantMeta: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  matchBadge: {
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  matchScore: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#059669',
-  },
-  bottomPadding: {
-    height: 100,
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: 32,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    gap: 12,
-  },
-  footerButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  pauseButton: {
-    backgroundColor: '#FFFBEB',
-  },
-  startButton: {
-    backgroundColor: '#ECFDF5',
-  },
-  pauseButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#F59E0B',
-  },
-  startButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#10B981',
-  },
-  deleteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    backgroundColor: '#FEE2E2',
-    gap: 8,
-  },
-  deleteButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
+  container: { ...G.screen },
+  navBar:    { ...G.rowBetween, paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3], backgroundColor: Colors.bgCard, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  navTitle:  { ...Typography.h5, color: Colors.textPrimary },
+  editBtn:   { width: 40, height: 40, borderRadius: Radius.md, backgroundColor: Colors.employerLight, alignItems: 'center', justifyContent: 'center' },
+  scroll:    { paddingBottom: 20 },
+
+  jobCard: { margin: Space.pagePadding, backgroundColor: Colors.bgCard, borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.border, padding: Space.cardPaddingLg, gap: Spacing[4] },
+  jobHeader:    { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing[3] },
+  jobHeaderInfo:{ flex: 1 },
+  jobTitle:     { ...Typography.h3, color: Colors.textPrimary, marginBottom: 3 },
+  jobCategory:  { ...Typography.bodySm, color: Colors.textSecondary },
+  jobMeta:      { gap: Spacing[2.5] },
+  metaRow:      { flexDirection: 'row', alignItems: 'center', gap: Spacing[2] },
+  metaText:     { ...Typography.body, color: Colors.textSecondary },
+  postedDate:   { ...Typography.caption, color: Colors.textMuted },
+
+  statsRow: { flexDirection: 'row', marginHorizontal: Space.pagePadding, marginBottom: Spacing[2], backgroundColor: Colors.bgCard, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border },
+  statCard:  { flex: 1, alignItems: 'center', paddingVertical: Spacing[4] },
+  statValue: { ...Typography.h2, color: Colors.textPrimary },
+  statLabel: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
+
+  section:  { paddingHorizontal: Space.pagePadding, marginTop: Space.sectionGap },
+  descCard: { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: Space.cardPadding, borderWidth: 1, borderColor: Colors.border },
+  descText: { ...Typography.bodyLg, color: Colors.textSecondary, lineHeight: 28 },
+
+  emptyApps:     { alignItems: 'center', paddingVertical: Spacing[8], gap: Spacing[2] },
+  emptyAppsText: { ...Typography.body, color: Colors.textMuted },
+
+  appRow:   { flexDirection: 'row', alignItems: 'center', gap: Spacing[3], backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: Space.cardPadding, marginBottom: Spacing[3], borderWidth: 1, borderColor: Colors.border },
+  appInfo:  { flex: 1 },
+  appName:  { ...Typography.h5, color: Colors.textPrimary },
+  appMeta:  { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
+  matchBadge: { backgroundColor: Colors.employerLight, borderRadius: Radius.sm, paddingHorizontal: Spacing[2.5], paddingVertical: Spacing[1] },
+  matchText:  { ...Typography.label, color: Colors.employer, fontWeight: '700' },
+
+  footer:       { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: Spacing[3], paddingHorizontal: Space.pagePadding, paddingVertical: Spacing[4], paddingBottom: Spacing[8], backgroundColor: Colors.bgCard, borderTopWidth: 1, borderTopColor: Colors.border },
+  footerBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing[2], paddingVertical: Spacing[3.5], borderRadius: Radius.lg },
+  footerBtnText:{ ...Typography.button, fontWeight: '600' },
 });

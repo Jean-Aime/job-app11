@@ -1,593 +1,223 @@
 import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Alert,
-  ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  MapPin,
-  Briefcase,
-  Calendar,
-  Star,
-  Award,
-  Building2,
-  CheckCircle,
-  XCircle,
-  Clock,
-  FileText,
-  ChevronRight,
+  ArrowLeft, MapPin, Briefcase, Calendar, Star, CheckCircle, XCircle, Clock,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-
-interface ApplicantDetails {
-  id: string;
-  status: string;
-  cover_letter: string | null;
-  match_score: number | null;
-  skills_match: number | null;
-  location_match: number | null;
-  experience_match: number | null;
-  created_at: string;
-  job_seeker: {
-    id: string;
-    full_name: string;
-    profile_photo_url: string | null;
-    bio: string | null;
-    city: string | null;
-    country: string | null;
-    current_occupation: string | null;
-    years_of_experience: number;
-    phone_number: string | null;
-    availability: string;
-  };
-  job: {
-    id: string;
-    title: string;
-  };
-}
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, StatusConfig, Palette,
+} from '@/constants/theme';
 
 export default function CandidateDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const [application, setApplication] = useState<ApplicantDetails | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [app,      setApp]      = useState<any>(null);
+  const [loading,  setLoading]  = useState(true);
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    fetchApplication();
+    (async () => {
+      const { data, error } = await supabase
+        .from('applications')
+        .select(`id, status, cover_letter, match_score, skills_match, location_match, experience_match, created_at,
+          job:jobs(id, title),
+          job_seeker:job_seekers(id, full_name, profile_photo_url, bio, city, country,
+                                  current_occupation, years_of_experience, phone_number, availability)`)
+        .eq('id', id).single();
+      if (error) { Alert.alert('Error', 'Failed to load'); router.back(); return; }
+      setApp(data);
+      setLoading(false);
+    })();
   }, [id]);
 
-  const fetchApplication = async () => {
-    if (!id) return;
-
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('applications')
-      .select(`
-        id,
-        status,
-        cover_letter,
-        match_score,
-        skills_match,
-        location_match,
-        experience_match,
-        created_at,
-        job:jobs(id, title),
-        job_seeker:job_seekers(
-          id,
-          full_name,
-          profile_photo_url,
-          bio,
-          city,
-          country,
-          current_occupation,
-          years_of_experience,
-          phone_number,
-          availability
-        )
-      `)
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      console.error('Error fetching application:', error);
-      Alert.alert('Error', 'Failed to load candidate details');
-      router.back();
-    } else {
-      setApplication(data as unknown as ApplicantDetails);
-    }
-    setLoading(false);
-  };
-
-  const updateStatus = async (newStatus: string) => {
-    if (!application) return;
-
+  const updateStatus = async (status: string) => {
     setUpdating(true);
-    const { error } = await supabase
-      .from('applications')
-      .update({ status: newStatus })
-      .eq('id', application.id);
-
+    await supabase.from('applications').update({ status }).eq('id', id);
+    setApp((prev: any) => ({ ...prev, status }));
     setUpdating(false);
-    if (error) {
-      Alert.alert('Error', 'Failed to update status');
-    } else {
-      setApplication({ ...application, status: newStatus });
-      Alert.alert('Success', `Application ${newStatus}`);
-    }
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
-        </View>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={G.emptyCenter}><ActivityIndicator size="large" color={Colors.employer} /></View>
       </SafeAreaView>
     );
   }
+  if (!app) return null;
 
-  if (!application) return null;
-
-  const getStatusConfig = () => {
-    switch (application.status) {
-      case 'accepted':
-        return { color: '#10B981', icon: CheckCircle, label: 'Accepted' };
-      case 'rejected':
-        return { color: '#EF4444', icon: XCircle, label: 'Rejected' };
-      case 'shortlisted':
-        return { color: '#8B5CF6', icon: Star, label: 'Shortlisted' };
-      case 'reviewed':
-        return { color: '#3B82F6', icon: Clock, label: 'Reviewed' };
-      default:
-        return { color: '#F59E0B', icon: Clock, label: 'Pending' };
-    }
-  };
-
-  const statusConfig = getStatusConfig();
-  const StatusIcon = statusConfig.icon;
+  const sc = StatusConfig[app.status] || StatusConfig.pending;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft color="#1E293B" size={24} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Candidate Details</Text>
-          <View style={{ width: 44 }} />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* Header */}
+      <View style={styles.navBar}>
+        <TouchableOpacity style={G.backBtn} onPress={() => router.back()}>
+          <ArrowLeft color={Colors.textPrimary} size={20} strokeWidth={2} />
+        </TouchableOpacity>
+        <Text style={styles.navTitle}>Candidate</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {/* Candidate hero */}
+        <View style={styles.heroCard}>
+          <Avatar uri={app.job_seeker?.profile_photo_url} name={app.job_seeker?.full_name} size="xl" color={Colors.employer} />
+          <Text style={styles.name}>{app.job_seeker?.full_name}</Text>
+          <Text style={styles.appliedFor}>Applied for: {app.job?.title}</Text>
+          <Badge label={sc.label} color={sc.color} bg={sc.bg} dot />
         </View>
 
-        {/* Candidate Info */}
-        <View style={styles.candidateCard}>
-          <View style={styles.avatar}>
-            {application.job_seeker.profile_photo_url ? (
-              <Image
-                source={{ uri: application.job_seeker.profile_photo_url }}
-                style={styles.avatarImage}
-              />
-            ) : (
-              <Text style={styles.avatarPlaceholder}>
-                {application.job_seeker.full_name?.charAt(0) || '?'}
-              </Text>
-            )}
-          </View>
-          <Text style={styles.candidateName}>{application.job_seeker.full_name}</Text>
-          <Text style={styles.appliedFor}>
-            Applied for: {application.job?.title}
-          </Text>
-          <Text style={styles.appliedDate}>
-            Applied {formatDate(application.created_at)}
-          </Text>
-        </View>
-
-        {/* Match Score */}
-        {application.match_score && (
-          <View style={styles.matchCard}>
-            <Text style={styles.matchTitle}>Match Analysis</Text>
-            <View style={styles.matchScoreContainer}>
-              <Text style={styles.matchScoreValue}>
-                {Math.round(application.match_score)}%
-              </Text>
-              <Text style={styles.matchScoreLabel}>Overall Match</Text>
-            </View>
-            <View style={styles.matchBreakdown}>
-              {application.skills_match && (
-                <View style={styles.matchItem}>
-                  <View style={styles.matchItemHeader}>
-                    <Star color="#F59E0B" size={16} />
-                    <Text style={styles.matchItemLabel}>Skills</Text>
-                  </View>
-                  <Text style={styles.matchItemValue}>
-                    {Math.round(application.skills_match)}%
-                  </Text>
-                </View>
-              )}
-              {application.location_match && (
-                <View style={styles.matchItem}>
-                  <View style={styles.matchItemHeader}>
-                    <MapPin color="#10B981" size={16} />
-                    <Text style={styles.matchItemLabel}>Location</Text>
-                  </View>
-                  <Text style={styles.matchItemValue}>
-                    {Math.round(application.location_match)}%
-                  </Text>
-                </View>
-              )}
-              {application.experience_match && (
-                <View style={styles.matchItem}>
-                  <View style={styles.matchItemHeader}>
-                    <Briefcase color="#3B82F6" size={16} />
-                    <Text style={styles.matchItemLabel}>Experience</Text>
-                  </View>
-                  <Text style={styles.matchItemValue}>
-                    {Math.round(application.experience_match)}%
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Status */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Application Status</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + '20' }]}>
-            <StatusIcon color={statusConfig.color} size={18} />
-            <Text style={[styles.statusText, { color: statusConfig.color }]}>
-              {statusConfig.label}
-            </Text>
-          </View>
-        </View>
-
-        {/* Contact Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contact Information</Text>
-          <View style={styles.infoCard}>
-            {application.job_seeker.phone_number && (
-              <View style={styles.infoRow}>
-                <Phone color="#64748B" size={20} />
-                <Text style={styles.infoValue}>{application.job_seeker.phone_number}</Text>
+        {/* Match score */}
+        {app.match_score != null && (
+          <View style={styles.section}>
+            <Text style={G.sectionTitle}>Match Analysis</Text>
+            <View style={styles.matchCard}>
+              <View style={styles.matchTotal}>
+                <Text style={styles.matchPct}>{Math.round(app.match_score)}%</Text>
+                <Text style={styles.matchLbl}>Overall Match</Text>
               </View>
-            )}
-            <View style={styles.infoRow}>
-              <MapPin color="#64748B" size={20} />
-              <Text style={styles.infoValue}>
-                {[application.job_seeker.city, application.job_seeker.country]
-                  .filter(Boolean)
-                  .join(', ') || 'Location not specified'}
-              </Text>
+              <View style={styles.matchBreakdown}>
+                {[
+                  { label: 'Skills',      value: app.skills_match,    color: Colors.warning },
+                  { label: 'Location',    value: app.location_match,  color: Colors.success },
+                  { label: 'Experience',  value: app.experience_match,color: Colors.primary },
+                ].filter(r => r.value != null).map(r => (
+                  <View key={r.label} style={styles.matchRow}>
+                    <Text style={styles.matchRowLabel}>{r.label}</Text>
+                    <View style={styles.matchBarTrack}>
+                      <View style={[styles.matchBarFill, { width: `${r.value}%` as any, backgroundColor: r.color }]} />
+                    </View>
+                    <Text style={[styles.matchRowPct, { color: r.color }]}>{Math.round(r.value)}%</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-            <View style={styles.infoRow}>
-              <Calendar color="#64748B" size={20} />
-              <Text style={styles.infoValue}>
-                Available: {application.job_seeker.availability}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Briefcase color="#64748B" size={20} />
-              <Text style={styles.infoValue}>
-                {application.job_seeker.years_of_experience} years experience
-              </Text>
-            </View>
+          </View>
+        )}
+
+        {/* Contact info */}
+        <View style={styles.section}>
+          <Text style={G.sectionTitle}>Contact & Details</Text>
+          <View style={styles.infoCard}>
+            {[
+              { icon: MapPin,    val: [app.job_seeker?.city, app.job_seeker?.country].filter(Boolean).join(', ') || 'Not specified' },
+              { icon: Calendar,  val: `Available: ${app.job_seeker?.availability?.replace(/_/g, ' ') || 'Not set'}` },
+              { icon: Briefcase, val: `${app.job_seeker?.years_of_experience || 0} years experience` },
+            ].map(({ icon: Icon, val }, i) => (
+              <View key={i} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                <Icon color={Colors.textMuted} size={16} strokeWidth={2} />
+                <Text style={styles.infoVal}>{val}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
-        {/* About */}
-        {application.job_seeker.bio && (
+        {/* Bio */}
+        {app.job_seeker?.bio && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About</Text>
-            <View style={styles.infoCard}>
-              <Text style={styles.bioText}>{application.job_seeker.bio}</Text>
+            <Text style={G.sectionTitle}>About</Text>
+            <View style={styles.textCard}>
+              <Text style={styles.textBody}>{app.job_seeker.bio}</Text>
             </View>
           </View>
         )}
 
-        {/* Cover Letter */}
-        {application.cover_letter && (
+        {/* Cover letter */}
+        {app.cover_letter && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Cover Letter</Text>
-            <View style={styles.infoCard}>
-              <Text style={styles.bioText}>{application.cover_letter}</Text>
+            <Text style={G.sectionTitle}>Cover Letter</Text>
+            <View style={styles.textCard}>
+              <Text style={styles.textBody}>{app.cover_letter}</Text>
             </View>
           </View>
         )}
 
-        <View style={styles.bottomPadding} />
+        <View style={{ height: 120 }} />
       </ScrollView>
 
       {/* Actions */}
-      <View style={styles.actionsFooter}>
-        {application.status === 'pending' || application.status === 'reviewed' ? (
-          <>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.shortlistButton]}
-              onPress={() => updateStatus('shortlisted')}
-              disabled={updating}
-            >
-              <Star color="#8B5CF6" size={18} />
-              <Text style={styles.shortlistButtonText}>Shortlist</Text>
+      <View style={styles.footer}>
+        {updating
+          ? <ActivityIndicator color={Colors.employer} />
+          : app.status === 'pending' || app.status === 'reviewed'
+          ? (
+            <View style={styles.actionRow}>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.adminLight }]} onPress={() => updateStatus('shortlisted')}>
+                <Star color={Colors.admin} size={16} strokeWidth={2} />
+                <Text style={[styles.actionText, { color: Colors.admin }]}>Shortlist</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.errorLight }]} onPress={() => updateStatus('rejected')}>
+                <XCircle color={Colors.error} size={16} strokeWidth={2} />
+                <Text style={[styles.actionText, { color: Colors.error }]}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          )
+          : app.status === 'shortlisted'
+          ? (
+            <View style={styles.actionRow}>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.employer, flex: 2 }]} onPress={() => updateStatus('accepted')}>
+                <CheckCircle color={Palette.white} size={16} strokeWidth={2} />
+                <Text style={[styles.actionText, { color: Palette.white }]}>Accept</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.errorLight }]} onPress={() => updateStatus('rejected')}>
+                <XCircle color={Colors.error} size={16} strokeWidth={2} />
+                <Text style={[styles.actionText, { color: Colors.error }]}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          )
+          : (
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.bg, flex: 1, borderWidth: 1, borderColor: Colors.border }]} onPress={() => updateStatus('pending')}>
+              <Clock color={Colors.textSecondary} size={16} strokeWidth={2} />
+              <Text style={[styles.actionText, { color: Colors.textSecondary }]}>Reset to Pending</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButton]}
-              onPress={() => updateStatus('rejected')}
-              disabled={updating}
-            >
-              <XCircle color="#EF4444" size={18} />
-              <Text style={styles.rejectButtonText}>Reject</Text>
-            </TouchableOpacity>
-          </>
-        ) : application.status === 'shortlisted' ? (
-          <>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.acceptButton]}
-              onPress={() => updateStatus('accepted')}
-              disabled={updating}
-            >
-              <CheckCircle color="#FFFFFF" size={18} />
-              <Text style={styles.acceptButtonText}>Accept</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButton]}
-              onPress={() => updateStatus('rejected')}
-              disabled={updating}
-            >
-              <XCircle color="#EF4444" size={18} />
-              <Text style={styles.rejectButtonText}>Reject</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.fullButton]}
-            onPress={() => updateStatus('pending')}
-            disabled={updating}
-          >
-            <Text style={styles.acceptButtonText}>Reset to Pending</Text>
-          </TouchableOpacity>
-        )}
+          )
+        }
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  candidateCard: {
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  avatarPlaceholder: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  candidateName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  appliedFor: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 2,
-  },
-  appliedDate: {
-    fontSize: 13,
-    color: '#94A3B8',
-  },
-  matchCard: {
-    margin: 20,
-    padding: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  matchTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 16,
-  },
-  matchScoreContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  matchScoreValue: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#059669',
-  },
-  matchScoreLabel: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  matchBreakdown: {
-    gap: 12,
-  },
-  matchItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  matchItemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  matchItemLabel: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  matchItemValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 12,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    gap: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  infoValue: {
-    fontSize: 15,
-    color: '#1E293B',
-    flex: 1,
-  },
-  bioText: {
-    fontSize: 15,
-    color: '#475569',
-    lineHeight: 24,
-  },
-  bottomPadding: {
-    height: 120,
-  },
-  actionsFooter: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: 32,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  fullButton: {
-    backgroundColor: '#059669',
-  },
-  shortlistButton: {
-    backgroundColor: '#F3E8FF',
-  },
-  shortlistButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#8B5CF6',
-  },
-  acceptButton: {
-    backgroundColor: '#059669',
-  },
-  acceptButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  rejectButton: {
-    backgroundColor: '#FEE2E2',
-  },
-  rejectButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
+  container: { ...G.screen },
+  navBar:    { ...G.rowBetween, paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3], backgroundColor: Colors.bgCard, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  navTitle:  { ...Typography.h5, color: Colors.textPrimary },
+  scroll:    { paddingBottom: 20 },
+
+  heroCard:   { alignItems: 'center', padding: Spacing[8], backgroundColor: Colors.bgCard, borderBottomWidth: 1, borderBottomColor: Colors.border, gap: Spacing[2] },
+  name:       { ...Typography.h3, color: Colors.textPrimary },
+  appliedFor: { ...Typography.bodySm, color: Colors.textSecondary },
+
+  section: { paddingHorizontal: Space.pagePadding, marginTop: Space.sectionGap },
+
+  matchCard:      { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
+  matchTotal:     { alignItems: 'center', padding: Spacing[6], borderBottomWidth: 1, borderBottomColor: Colors.border },
+  matchPct:       { ...Typography.display, color: Colors.employer },
+  matchLbl:       { ...Typography.bodySm, color: Colors.textSecondary },
+  matchBreakdown: { padding: Space.cardPadding, gap: Spacing[4] },
+  matchRow:       { flexDirection: 'row', alignItems: 'center', gap: Spacing[3] },
+  matchRowLabel:  { ...Typography.label, color: Colors.textSecondary, width: 80 },
+  matchBarTrack:  { flex: 1, height: 6, backgroundColor: Colors.bg, borderRadius: 3, overflow: 'hidden' },
+  matchBarFill:   { height: '100%', borderRadius: 3 },
+  matchRowPct:    { ...Typography.label, fontWeight: '700', width: 36, textAlign: 'right' },
+
+  infoCard:       { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: Space.cardPadding },
+  infoRow:        { flexDirection: 'row', alignItems: 'center', gap: Spacing[3], paddingVertical: Spacing[3.5] },
+  infoRowBorder:  { borderTopWidth: 1, borderTopColor: Colors.divider },
+  infoVal:        { ...Typography.body, color: Colors.textPrimary, flex: 1 },
+
+  textCard: { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: Space.cardPadding, borderWidth: 1, borderColor: Colors.border },
+  textBody: { ...Typography.body, color: Colors.textSecondary, lineHeight: 24 },
+
+  footer:    { paddingHorizontal: Space.pagePadding, paddingVertical: Spacing[4], paddingBottom: Spacing[8], backgroundColor: Colors.bgCard, borderTopWidth: 1, borderTopColor: Colors.border },
+  actionRow: { flexDirection: 'row', gap: Spacing[3] },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing[2], paddingVertical: Spacing[4], borderRadius: Radius.lg },
+  actionText:{ ...Typography.button, fontWeight: '600' },
 });

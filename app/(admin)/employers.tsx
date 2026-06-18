@@ -1,68 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  Image,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  RefreshControl, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import {
-  Building2,
-  CheckCircle,
-  XCircle,
-  Clock,
-  FileText,
-  ChevronRight,
-} from 'lucide-react-native';
+import { Building2, CheckCircle, XCircle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { Employer } from '@/types/database';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { JobCardSkeleton } from '@/components/ui/SkeletonLoader';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Badge } from '@/components/ui/Badge';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, VerificationConfig, Palette,
+} from '@/constants/theme';
+
+const FILTERS = [
+  { value: 'all',      label: 'All' },
+  { value: 'pending',  label: 'Pending' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+];
 
 export default function AdminEmployersScreen() {
-  const router = useRouter();
-  const [employers, setEmployers] = useState<Employer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [employers,  setEmployers]  = useState<Employer[]>([]);
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [filter,     setFilter]     = useState('all');
 
-  useEffect(() => {
-    fetchEmployers();
-  }, [selectedStatus]);
-
-  const fetchEmployers = async () => {
+  const fetchEmployers = useCallback(async () => {
     setLoading(true);
-
-    let query = supabase
-      .from('employers')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (selectedStatus === 'pending') {
-      query = query.eq('verification_status', 'pending');
-    } else if (selectedStatus === 'approved') {
-      query = query.eq('verification_status', 'approved');
-    } else if (selectedStatus === 'rejected') {
-      query = query.eq('verification_status', 'rejected');
-    }
-
-    const { data } = await query;
+    let q = supabase.from('employers').select('*').order('created_at', { ascending: false });
+    if (filter !== 'all') q = q.eq('verification_status', filter);
+    const { data } = await q;
     if (data) setEmployers(data);
     setLoading(false);
     setRefreshing(false);
-  };
+  }, [filter]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchEmployers();
-  };
+  useEffect(() => { fetchEmployers(); }, [fetchEmployers]);
 
-  const updateVerificationStatus = async (employerId: string, status: 'approved' | 'rejected') => {
+  const updateStatus = (id: string, status: 'approved' | 'rejected') => {
     Alert.alert(
-      ` ${status === 'approved' ? 'Approve' : 'Reject'} Verification`,
+      `${status === 'approved' ? 'Approve' : 'Reject'} Employer`,
       `Are you sure you want to ${status} this employer?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -70,10 +50,9 @@ export default function AdminEmployersScreen() {
           text: status === 'approved' ? 'Approve' : 'Reject',
           style: status === 'approved' ? 'default' : 'destructive',
           onPress: async () => {
-            await supabase
-              .from('employers')
+            await supabase.from('employers')
               .update({ verification_status: status, is_verified: status === 'approved' })
-              .eq('id', employerId);
+              .eq('id', id);
             fetchEmployers();
           },
         },
@@ -81,288 +60,103 @@ export default function AdminEmployersScreen() {
     );
   };
 
-  const filterButtons = [
-    { value: 'all', label: 'All' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'approved', label: 'Approved' },
-    { value: 'rejected', label: 'Rejected' },
-  ];
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return <CheckCircle color="#10B981" size={16} />;
-      case 'rejected':
-        return <XCircle color="#EF4444" size={16} />;
-      default:
-        return <Clock color="#F59E0B" size={16} />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return '#10B981';
-      case 'rejected':
-        return '#EF4444';
-      default:
-        return '#F59E0B';
-    }
-  };
-
-  const renderEmployer = ({ item }: { item: Employer }) => (
-    <View style={styles.employerCard}>
-      <TouchableOpacity
-        style={styles.employerCardContent}
-        onPress={() => router.push(`/(admin)/employers/${item.id}`)}
-      >
-        <View style={styles.avatar}>
-          {item.company_logo_url ? (
-            <Image source={{ uri: item.company_logo_url }} style={styles.avatarImage} />
-          ) : (
-            <Building2 color="#64748B" size={24} />
-          )}
-        </View>
-        <View style={styles.employerInfo}>
-          <Text style={styles.companyName}>{item.company_name}</Text>
-          <Text style={styles.industry}>{item.industry || 'No industry'}</Text>
-          <View style={styles.statusBadge}>
-            {getStatusIcon(item.verification_status)}
-            <Text style={[styles.statusText, { color: getStatusColor(item.verification_status) }]}>
-              {item.verification_status}
-            </Text>
+  const renderItem = ({ item }: { item: Employer }) => {
+    const vcKey = item.verification_status || 'pending';
+    const vc    = VerificationConfig[vcKey] || VerificationConfig.pending;
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardTop}>
+          <View style={styles.logo}>
+            {item.company_logo_url
+              ? <Image source={{ uri: item.company_logo_url }} style={styles.logoImg} />
+              : <Building2 color={Colors.textMuted} size={22} strokeWidth={1.8} />}
+          </View>
+          <View style={styles.info}>
+            <Text style={styles.name}>{item.company_name}</Text>
+            <Text style={styles.industry}>{item.industry || 'No industry listed'}</Text>
+            <Badge label={vc.label} color={vc.color} bg={vc.bg} dot size="sm" />
           </View>
         </View>
-        <ChevronRight color="#94A3B8" size={20} />
-      </TouchableOpacity>
 
-      {item.verification_status === 'pending' && (
-        <View style={styles.actionsRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.approveButton]}
-            onPress={() => updateVerificationStatus(item.id, 'approved')}
-          >
-            <CheckCircle color="#10B981" size={16} />
-            <Text style={styles.approveButtonText}>Approve</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.rejectButton]}
-            onPress={() => updateVerificationStatus(item.id, 'rejected')}
-          >
-            <XCircle color="#EF4444" size={16} />
-            <Text style={styles.rejectButtonText}>Reject</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {item.verification_status === 'rejected' && (
-        <View style={styles.actionsRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.approveButton]}
-            onPress={() => updateVerificationStatus(item.id, 'approved')}
-          >
-            <CheckCircle color="#10B981" size={16} />
-            <Text style={styles.approveButtonText}>Approve</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+        {(vcKey === 'pending' || vcKey === 'rejected') && (
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: Colors.successLight }]}
+              onPress={() => updateStatus(item.id, 'approved')}
+            >
+              <CheckCircle color={Colors.success} size={15} strokeWidth={2.5} />
+              <Text style={[styles.actionText, { color: Colors.success }]}>Approve</Text>
+            </TouchableOpacity>
+            {vcKey === 'pending' && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: Colors.errorLight }]}
+                onPress={() => updateStatus(item.id, 'rejected')}
+              >
+                <XCircle color={Colors.error} size={15} strokeWidth={2.5} />
+                <Text style={[styles.actionText, { color: Colors.error }]}>Reject</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Employers</Text>
-        <Text style={styles.headerSubtitle}>
-          {employers.length} compan{employers.length !== 1 ? 'ies' : 'y'}
-        </Text>
+        <Text style={styles.heading}>Employers</Text>
+        {!loading && (
+          <Text style={styles.count}>{employers.length} compan{employers.length !== 1 ? 'ies' : 'y'}</Text>
+        )}
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        {filterButtons.map((button) => (
-          <TouchableOpacity
-            key={button.value}
-            style={[
-              styles.filterButton,
-              selectedStatus === button.value && styles.filterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus(button.value)}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                selectedStatus === button.value && styles.filterTextActive,
-              ]}
-            >
-              {button.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.filterWrap}>
+        <FlatList
+          data={FILTERS} horizontal showsHorizontalScrollIndicator={false}
+          keyExtractor={i => i.value} contentContainerStyle={styles.filterList}
+          renderItem={({ item }) => (
+            <FilterChip label={item.label} active={filter === item.value}
+              onPress={() => setFilter(item.value)} color={Colors.admin} />
+          )}
+        />
       </View>
 
-      {/* Employers List */}
       <FlatList
-        data={employers}
-        renderItem={renderEmployer}
-        keyExtractor={(item) => item.id}
+        data={employers} renderItem={renderItem} keyExtractor={i => i.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#8B5CF6']} />
-        }
-        ListEmptyComponent={
-          loading ? undefined : (
-            <View style={styles.emptyState}>
-              <Building2 color="#CBD5E1" size={48} />
-              <Text style={styles.emptyStateTitle}>No Employers Found</Text>
-            </View>
-          )
-        }
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchEmployers(); }} tintColor={Colors.admin} />}
+        ListHeaderComponent={loading ? <View>{[1,2,3].map(k => <JobCardSkeleton key={k} />)}</View> : null}
+        ListEmptyComponent={!loading ? (
+          <EmptyState
+            icon={<Building2 color={Colors.textMuted} size={40} strokeWidth={1.5} />}
+            title="No employers found"
+          />
+        ) : null}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  filterButtonActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
-  },
-  listContainer: {
-    padding: 20,
-    paddingTop: 8,
-  },
-  employerCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    overflow: 'hidden',
-  },
-  employerCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-  },
-  employerInfo: {
-    flex: 1,
-  },
-  companyName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  industry: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 6,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-    textTransform: 'capitalize',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-  },
-  approveButton: {},
-  rejectButton: {
-    borderLeftWidth: 1,
-    borderLeftColor: '#F1F5F9',
-  },
-  approveButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#10B981',
-  },
-  rejectButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 16,
-  },
+  container:  { ...G.screen },
+  header:     { paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3] },
+  heading:    { ...Typography.h2, color: Colors.textPrimary },
+  count:      { ...Typography.bodySm, color: Colors.textSecondary, marginTop: Spacing[0.5] },
+  filterWrap: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  filterList: { paddingHorizontal: Space.pagePadding, paddingVertical: Spacing[3], gap: Spacing[2] },
+  list:       { padding: Space.pagePadding, paddingTop: Spacing[3], paddingBottom: Space.listBottom },
+
+  card:    { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, marginBottom: Space.cardGap, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing[3], padding: Space.cardPadding },
+  logo:    { width: 48, height: 48, borderRadius: Radius.md, backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  logoImg: { width: 48, height: 48 },
+  info:    { flex: 1, gap: Spacing[1] },
+  name:    { ...Typography.h5, color: Colors.textPrimary },
+  industry:{ ...Typography.bodySm, color: Colors.textSecondary },
+
+  actions:    { flexDirection: 'row', borderTopWidth: 1, borderTopColor: Colors.divider },
+  actionBtn:  { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing[1.5], paddingVertical: Spacing[3] },
+  actionText: { ...Typography.label, fontWeight: '600' },
 });

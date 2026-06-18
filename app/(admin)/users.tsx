@@ -1,342 +1,138 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-  Image,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import {
-  Users,
-  Search,
-  CheckCircle,
-  XCircle,
-  Mail,
-  Calendar,
-  ChevronRight,
-} from 'lucide-react-native';
+import { Users, Mail, Calendar, CheckCircle, XCircle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { formatDate } from '@/utils/formatters';
 import { User } from '@/types/database';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { JobCardSkeleton } from '@/components/ui/SkeletonLoader';
+import { EmptyState } from '@/components/ui/EmptyState';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette,
+} from '@/constants/theme';
+import { formatDate } from '@/utils/formatters';
+
+const FILTERS = [
+  { value: 'all',        label: 'All' },
+  { value: 'verified',   label: 'Verified' },
+  { value: 'unverified', label: 'Unverified' },
+];
 
 export default function AdminUsersScreen() {
-  const router = useRouter();
-  const [users, setUsers] = useState<(User & { job_seeker?: any })[]>([]);
+  const [users,   setUsers]   = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [filter, setFilter]   = useState('all');
 
-  useEffect(() => {
-    fetchUsers();
-  }, [selectedStatus]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
-
-    let query = supabase
+    let q = supabase
       .from('users')
-      .select(`
-        *,
-        job_seeker:job_seekers(full_name, profile_photo_url, city)
-      `)
+      .select('*, job_seeker:job_seekers(full_name, profile_photo_url, city)')
       .eq('role', 'job_seeker')
       .order('created_at', { ascending: false });
-
-    if (selectedStatus === 'verified') {
-      query = query.eq('is_verified', true);
-    } else if (selectedStatus === 'unverified') {
-      query = query.eq('is_verified', false);
-    } else if (selectedStatus === 'active') {
-      query = query.eq('is_active', true);
-    }
-
-    const { data } = await query;
+    if (filter === 'verified')   q = q.eq('is_verified', true);
+    if (filter === 'unverified') q = q.eq('is_verified', false);
+    const { data } = await q;
     if (data) setUsers(data);
     setLoading(false);
     setRefreshing(false);
-  };
+  }, [filter]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  const toggleActive = async (id: string, active: boolean) => {
+    await supabase.from('users').update({ is_active: !active }).eq('id', id);
     fetchUsers();
   };
 
-  const toggleUserStatus = async (userId: string, isActive: boolean) => {
-    await supabase.from('users').update({ is_active: !isActive }).eq('id', userId);
-    fetchUsers();
-  };
-
-  const filterButtons = [
-    { value: 'all', label: 'All' },
-    { value: 'verified', label: 'Verified' },
-    { value: 'unverified', label: 'Unverified' },
-    { value: 'active', label: 'Active' },
-  ];
-
-
-  const renderUser = ({ item }: { item: User & { job_seeker?: any } }) => (
-    <TouchableOpacity
-      style={styles.userCard}
-      onPress={() => router.push(`/(admin)/users/${item.id}`)}
-    >
-      <View style={styles.userCardContent}>
-        <View style={styles.avatar}>
-          {item.job_seeker?.profile_photo_url ? (
-            <Image source={{ uri: item.job_seeker.profile_photo_url }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarPlaceholder}>
-              {item.job_seeker?.full_name?.charAt(0) || '?'}
-            </Text>
-          )}
-        </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>
-            {item.job_seeker?.full_name || 'No name provided'}
-          </Text>
-          <View style={styles.userMeta}>
-            <Mail color="#94A3B8" size={12} />
-            <Text style={styles.userMetaText}>{item.email}</Text>
+  const renderItem = ({ item }: { item: any }) => (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <Avatar uri={item.job_seeker?.profile_photo_url} name={item.job_seeker?.full_name} size="md" color={Colors.admin} />
+        <View style={styles.info}>
+          <Text style={styles.name}>{item.job_seeker?.full_name || 'No name'}</Text>
+          <View style={styles.metaRow}>
+            <Mail color={Colors.textMuted} size={11} strokeWidth={2} />
+            <Text style={styles.metaText} numberOfLines={1}>{item.email}</Text>
           </View>
-          <View style={styles.userMeta}>
-            <Calendar color="#94A3B8" size={12} />
-            <Text style={styles.userMetaText}>Joined {formatDate(item.created_at)}</Text>
+          <View style={styles.metaRow}>
+            <Calendar color={Colors.textMuted} size={11} strokeWidth={2} />
+            <Text style={styles.metaText}>Joined {formatDate(item.created_at)}</Text>
           </View>
         </View>
-        <View style={styles.userStatus}>
-          <View style={[styles.statusBadge, item.is_verified ? styles.verified : styles.unverified]}>
-            {item.is_verified ? (
-              <CheckCircle color="#10B981" size={14} />
-            ) : (
-              <XCircle color="#EF4444" size={14} />
-            )}
-            <Text style={[styles.statusText, item.is_verified && styles.verifiedText]}>
-              {item.is_verified ? 'Verified' : 'Unverified'}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.actionButton, item.is_active ? styles.suspendButton : styles.activateButton]}
-            onPress={() => toggleUserStatus(item.id, item.is_active)}
-          >
-            <Text style={styles.actionButtonText}>
-              {item.is_active ? 'Suspend' : 'Activate'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <Badge
+          label={item.is_verified ? 'Verified' : 'Unverified'}
+          color={item.is_verified ? Colors.success : Colors.error}
+          bg={item.is_verified ? Colors.successLight : Colors.errorLight}
+          dot size="sm"
+        />
       </View>
-    </TouchableOpacity>
+      <View style={styles.cardFooter}>
+        <Text style={[styles.statusText, { color: item.is_active ? Colors.success : Colors.error }]}>
+          {item.is_active ? 'Active' : 'Suspended'}
+        </Text>
+        <TouchableOpacity
+          style={[styles.toggleBtn, { backgroundColor: item.is_active ? Colors.errorLight : Colors.successLight }]}
+          onPress={() => toggleActive(item.id, item.is_active)}
+        >
+          <Text style={[styles.toggleBtnText, { color: item.is_active ? Colors.error : Colors.success }]}>
+            {item.is_active ? 'Suspend' : 'Activate'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Job Seekers</Text>
-        <Text style={styles.headerSubtitle}>
-          {users.length} user{users.length !== 1 ? 's' : ''}
-        </Text>
+        <Text style={styles.heading}>Job Seekers</Text>
+        {!loading && <Text style={styles.count}>{users.length} user{users.length !== 1 ? 's' : ''}</Text>}
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        {filterButtons.map((button) => (
-          <TouchableOpacity
-            key={button.value}
-            style={[
-              styles.filterButton,
-              selectedStatus === button.value && styles.filterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus(button.value)}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                selectedStatus === button.value && styles.filterTextActive,
-              ]}
-            >
-              {button.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.filterWrap}>
+        <FlatList
+          data={FILTERS} horizontal showsHorizontalScrollIndicator={false}
+          keyExtractor={i => i.value} contentContainerStyle={styles.filterList}
+          renderItem={({ item }) => (
+            <FilterChip label={item.label} active={filter === item.value} onPress={() => setFilter(item.value)} color={Colors.admin} />
+          )}
+        />
       </View>
 
-      {/* Users List */}
       <FlatList
-        data={users}
-        renderItem={renderUser}
-        keyExtractor={(item) => item.id}
+        data={users} renderItem={renderItem} keyExtractor={i => i.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#8B5CF6']} />
-        }
-        ListEmptyComponent={
-          loading ? null : (
-            <View style={styles.emptyState}>
-              <Users color="#CBD5E1" size={48} />
-              <Text style={styles.emptyStateTitle}>No Users Found</Text>
-            </View>
-          )
-        }
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchUsers(); }} tintColor={Colors.admin} />}
+        ListHeaderComponent={loading ? <View>{[1,2,3].map(k => <JobCardSkeleton key={k} />)}</View> : null}
+        ListEmptyComponent={!loading ? <EmptyState icon={<Users color={Colors.textMuted} size={40} strokeWidth={1.5} />} title="No users found" /> : null}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  filterButtonActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
-  },
-  listContainer: {
-    padding: 20,
-    paddingTop: 8,
-  },
-  userCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  userCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  avatarPlaceholder: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  userMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  userMetaText: {
-    fontSize: 12,
-    color: '#94A3B8',
-  },
-  userStatus: {
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
-    marginBottom: 8,
-  },
-  verified: {
-    backgroundColor: '#D1FAE5',
-  },
-  unverified: {
-    backgroundColor: '#FEE2E2',
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
-  verifiedText: {
-    color: '#10B981',
-  },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  suspendButton: {
-    backgroundColor: '#FEE2E2',
-  },
-  activateButton: {
-    backgroundColor: '#D1FAE5',
-  },
-  actionButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 16,
-  },
+  container: { ...G.screen },
+  header:    { paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3] },
+  heading:   { ...Typography.h2, color: Colors.textPrimary },
+  count:     { ...Typography.bodySm, color: Colors.textSecondary, marginTop: Spacing[0.5] },
+  filterWrap:{ borderBottomWidth: 1, borderBottomColor: Colors.border },
+  filterList:{ paddingHorizontal: Space.pagePadding, paddingVertical: Spacing[3], gap: Spacing[2] },
+  list:      { padding: Space.pagePadding, paddingTop: Spacing[3], paddingBottom: Space.listBottom },
+  card:      { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: Space.cardPadding, marginBottom: Space.cardGap, borderWidth: 1, borderColor: Colors.border, gap: Spacing[3] },
+  cardTop:   { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing[3] },
+  info:      { flex: 1, gap: Spacing[0.5] },
+  name:      { ...Typography.h5, color: Colors.textPrimary },
+  metaRow:   { flexDirection: 'row', alignItems: 'center', gap: Spacing[1] },
+  metaText:  { ...Typography.caption, color: Colors.textMuted, flex: 1 },
+  cardFooter:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Spacing[3], borderTopWidth: 1, borderTopColor: Colors.divider },
+  statusText:{ ...Typography.label, fontWeight: '600' },
+  toggleBtn: { paddingHorizontal: Spacing[3.5], paddingVertical: Spacing[1.5], borderRadius: Radius.full },
+  toggleBtnText: { ...Typography.label, fontWeight: '600' },
 });

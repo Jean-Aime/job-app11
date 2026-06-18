@@ -1,184 +1,133 @@
 import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-  ScrollView,
-  Image,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import {
-  MapPin,
-  Briefcase,
-  Building2,
-  Navigation,
-  List,
-  Map as MapIcon,
-  ChevronRight,
-} from 'lucide-react-native';
+import { MapPin, Briefcase, Navigation, List, Map as MapIcon, ChevronRight } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { formatTimeAgo } from '@/utils/formatters';
 import { Job } from '@/types/database';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette,
+} from '@/constants/theme';
 
-const { width, height } = Dimensions.get('window');
+const DISTANCES = ['5', '10', '20', '50'];
 
 export default function MapScreen() {
-  const router = useRouter();
+  const router  = useRouter();
   const [distance, setDistance] = useState('10');
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('list');
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'list'|'map'>('list');
+  const [jobs,     setJobs]     = useState<Job[]>([]);
+  const [loading,  setLoading]  = useState(true);
 
-  const distances = ['5', '10', '20', '50'];
-
-  useEffect(() => {
-    fetchJobs();
-  }, [distance]);
+  useEffect(() => { fetchJobs(); }, [distance]);
 
   const fetchJobs = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        employer:employers(company_name, company_logo_url),
-        category:job_categories(name)
-      `)
+      .select('*, employer:employers(company_name), category:job_categories(name)')
       .eq('status', 'active')
       .limit(20);
-
-    if (!error && data) {
-      setJobs(data);
-    }
+    if (data) setJobs(data);
     setLoading(false);
   };
 
-
-  // Use real jobs data
-  const nearbyJobs = jobs.map((job: any) => ({
-    id: job.id,
-    title: job.title,
-    company: job.employer?.company_name || 'Unknown Company',
-    distance: job.city ? `${Math.floor(Math.random() * parseInt(distance))} km` : 'Remote',
-    city: job.city || 'Remote',
-    type: job.employment_type.replace('_', ' '),
-  }));
-
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Discover Nearby Jobs</Text>
-        <View style={styles.locationRow}>
-          <MapPin color="#2563EB" size={16} />
-          <Text style={styles.locationText}>Kigali, Rwanda</Text>
+        <View>
+          <Text style={styles.heading}>Nearby Jobs</Text>
+          <View style={styles.locationRow}>
+            <MapPin color={Colors.primary} size={13} strokeWidth={2.5} />
+            <Text style={styles.locationText}>Kigali, Rwanda</Text>
+          </View>
         </View>
       </View>
 
-      {/* Distance Filter */}
-      <View style={styles.filterSection}>
+      {/* Distance filter */}
+      <View style={styles.filterRow}>
         <Text style={styles.filterLabel}>Within</Text>
-        <View style={styles.distanceOptions}>
-          {distances.map((d) => (
+        <View style={styles.filterChips}>
+          {DISTANCES.map(d => (
             <TouchableOpacity
               key={d}
-              style={[
-                styles.distanceOption,
-                distance === d && styles.distanceOptionActive,
-              ]}
+              style={[styles.distChip, distance === d && styles.distChipActive]}
               onPress={() => setDistance(d)}
             >
-              <Text
-                style={[
-                  styles.distanceText,
-                  distance === d && styles.distanceTextActive,
-                ]}
-              >
-                {d} km
-              </Text>
+              <Text style={[styles.distText, distance === d && styles.distTextActive]}>{d} km</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      {/* View Toggle */}
-      <View style={styles.viewToggle}>
-        <TouchableOpacity
-          style={[styles.toggleOption, viewMode === 'list' && styles.toggleOptionActive]}
-          onPress={() => setViewMode('list')}
-        >
-          <List color={viewMode === 'list' ? '#2563EB' : '#64748B'} size={20} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.toggleOption, viewMode === 'map' && styles.toggleOptionActive]}
-          onPress={() => setViewMode('map')}
-        >
-          <MapIcon color={viewMode === 'map' ? '#2563EB' : '#64748B'} size={20} />
-        </TouchableOpacity>
+      {/* View toggle */}
+      <View style={styles.toggleRow}>
+        {([['list', List, 'List View'], ['map', MapIcon, 'Map View']] as const).map(([mode, Icon, label]) => (
+          <TouchableOpacity
+            key={mode}
+            style={[styles.toggleBtn, viewMode === mode && styles.toggleBtnActive]}
+            onPress={() => setViewMode(mode)}
+          >
+            <Icon color={viewMode === mode ? Colors.primary : Colors.textMuted} size={16} strokeWidth={2} />
+            <Text style={[styles.toggleText, viewMode === mode && styles.toggleTextActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
+      {/* Content */}
       {viewMode === 'map' ? (
         <View style={styles.mapPlaceholder}>
-          <View style={styles.mapContainer}>
-            <View style={styles.mapPin}>
-              <Navigation color="#2563EB" size={32} />
-            </View>
-            <Text style={styles.mapPlaceholderText}>
-              Map Integration Requires Google Maps API Key
-            </Text>
-            <Text style={styles.mapPlaceholderSubtext}>
-              {nearbyJobs.length} jobs within {distance} km of your location
-            </Text>
+          <View style={styles.mapPin}>
+            <Navigation color={Colors.primary} size={28} strokeWidth={2} />
           </View>
+          <Text style={styles.mapTitle}>Map Integration</Text>
+          <Text style={styles.mapBody}>
+            Requires a Google Maps API key.{'\n'}
+            {loading ? '...' : `${jobs.length} jobs within ${distance} km`}
+          </Text>
         </View>
       ) : loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2563EB" />
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={Colors.primary} />
         </View>
       ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContainer}
-        >
-          <Text style={styles.resultCount}>
-            {nearbyJobs.length} jobs nearby
-          </Text>
-          {nearbyJobs.map((job) => (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
+          <Text style={styles.resultCount}>{jobs.length} jobs nearby</Text>
+          {jobs.map(job => (
             <TouchableOpacity
               key={job.id}
-              style={styles.jobCard}
-              onPress={() => router.push(`/(job-seeker)/jobs/${job.id}`)}
+              style={styles.card}
+              onPress={() => router.push(`/(job-seeker)/jobs/${job.id}` as any)}
+              activeOpacity={0.85}
             >
-              <View style={styles.jobCardContent}>
-                <View style={styles.jobDistance}>
-                  <Navigation color="#2563EB" size={16} />
-                  <Text style={styles.distanceLabel}>{job.distance}</Text>
+              <View style={styles.distBadge}>
+                <Navigation color={Colors.primary} size={11} strokeWidth={2} />
+                <Text style={styles.distBadgeText}>{Math.floor(Math.random() * parseInt(distance))} km</Text>
+              </View>
+
+              <View style={styles.cardInner}>
+                <View style={styles.cardIcon}>
+                  <Briefcase color={Colors.primary} size={18} strokeWidth={2} />
                 </View>
-                <View style={styles.CompanyIcon}>
-                  <Building2 color="#64748B" size={24} />
-                </View>
-                <View style={styles.jobInfo}>
-                  <Text style={styles.jobTitle}>{job.title}</Text>
-                  <Text style={styles.companyName}>{job.company}</Text>
-                  <View style={styles.jobTags}>
-                    <View style={styles.jobTag}>
-                      <MapPin color="#94A3B8" size={12} />
-                      <Text style={styles.jobTagText}>{job.city}</Text>
-                    </View>
-                    <View style={styles.jobTag}>
-                      <Briefcase color="#94A3B8" size={12} />
-                      <Text style={styles.jobTagText}>{job.type}</Text>
-                    </View>
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>{job.title}</Text>
+                  <Text style={styles.cardCompany}>{(job as any).employer?.company_name}</Text>
+                  <View style={styles.cardMeta}>
+                    <MapPin color={Colors.textMuted} size={11} strokeWidth={2} />
+                    <Text style={styles.cardMetaText}>{job.city || 'Remote'}</Text>
+                    <View style={styles.metaDot} />
+                    <Briefcase color={Colors.textMuted} size={11} strokeWidth={2} />
+                    <Text style={styles.cardMetaText}>{job.employment_type?.replace(/_/g, ' ')}</Text>
                   </View>
                 </View>
-                <ChevronRight color="#94A3B8" size={20} />
+                <ChevronRight color={Colors.textMuted} size={18} strokeWidth={2} />
               </View>
             </TouchableOpacity>
           ))}
+          <View style={G.listBottom} />
         </ScrollView>
       )}
     </SafeAreaView>
@@ -186,204 +135,99 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
+  container: { ...G.screen },
+
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: Space.pagePadding,
+    paddingTop: Space.pageTop,
+    paddingBottom: Spacing[3],
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  locationRow: {
+  heading:      { ...Typography.h2, color: Colors.textPrimary },
+  locationRow:  { flexDirection: 'row', alignItems: 'center', gap: Spacing[1], marginTop: Spacing[1] },
+  locationText: { ...Typography.label, color: Colors.primary, fontWeight: '600' },
+
+  filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Spacing[3],
+    paddingHorizontal: Space.pagePadding,
+    paddingBottom: Spacing[3],
   },
-  locationText: {
-    fontSize: 14,
-    color: '#2563EB',
-    fontWeight: '500',
+  filterLabel: { ...Typography.label, color: Colors.textSecondary },
+  filterChips: { flexDirection: 'row', gap: Spacing[2] },
+  distChip: {
+    paddingHorizontal: Spacing[3.5], paddingVertical: Spacing[1.5],
+    borderRadius: Radius.full,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1.5, borderColor: Colors.border,
   },
-  filterSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
-    marginBottom: 8,
-  },
-  distanceOptions: {
+  distChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  distText:       { ...Typography.label, color: Colors.textSecondary },
+  distTextActive: { color: Palette.white },
+
+  toggleRow: {
     flexDirection: 'row',
-    gap: 8,
+    marginHorizontal: Space.pagePadding,
+    marginBottom: Spacing[3],
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    borderWidth: 1, borderColor: Colors.border,
+    padding: Spacing[1],
+    gap: Spacing[1],
   },
-  distanceOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  toggleBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: Spacing[1.5], paddingVertical: Spacing[2], borderRadius: Radius.md,
   },
-  distanceOptionActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  distanceText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  distanceTextActive: {
-    color: '#FFFFFF',
-  },
-  viewToggle: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 12,
-  },
-  toggleOption: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  toggleOptionActive: {
-    backgroundColor: '#EFF6FF',
-  },
+  toggleBtnActive: { backgroundColor: Colors.primaryLight },
+  toggleText:       { ...Typography.label, color: Colors.textMuted },
+  toggleTextActive: { color: Colors.primary, fontWeight: '600' },
+
   mapPlaceholder: {
-    flex: 1,
-    marginHorizontal: 20,
-  },
-  mapContainer: {
-    flex: 1,
-    backgroundColor: '#E0E7FF',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    marginHorizontal: Space.pagePadding,
+    backgroundColor: Colors.bg,
+    borderRadius: Radius.xl,
+    borderWidth: 1, borderColor: Colors.border,
+    gap: Spacing[3],
   },
   mapPin: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    elevation: 4,
-    boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: Colors.bgCard,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: Colors.border,
   },
-  mapPlaceholderText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  mapPlaceholderSubtext: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  listContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  resultCount: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 12,
-  },
-  jobCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  mapTitle: { ...Typography.h4, color: Colors.textPrimary },
+  mapBody:  { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', lineHeight: 24 },
+
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  list:        { paddingHorizontal: Space.pagePadding },
+  resultCount: { ...Typography.bodySm, color: Colors.textSecondary, marginBottom: Spacing[3] },
+
+  card: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    marginBottom: Space.cardGap,
+    borderWidth: 1, borderColor: Colors.border,
     overflow: 'hidden',
   },
-  jobCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
+  distBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing[1],
+    alignSelf: 'flex-end',
+    marginTop: Spacing[2], marginRight: Spacing[3],
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: Spacing[2.5], paddingVertical: Spacing[0.5],
+    borderRadius: Radius.full,
   },
-  jobDistance: {
-    position: 'absolute',
-    top: 8,
-    right: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  distanceLabel: {
-    fontSize: 12,
-    color: '#2563EB',
-    fontWeight: '600',
-  },
-  CompanyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  companyLogo: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-  },
-  jobInfo: {
-    flex: 1,
-  },
-  jobTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  companyName: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 8,
-  },
-  jobTags: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  jobTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  jobTagText: {
-    fontSize: 12,
-    color: '#64748B',
-  },
+  distBadgeText: { ...Typography.caption, color: Colors.primary, fontWeight: '600' },
+
+  cardInner:    { flexDirection: 'row', alignItems: 'center', padding: Space.cardPadding, paddingTop: Spacing[2], gap: Spacing[3] },
+  cardIcon:     { ...G.iconMd, backgroundColor: Colors.primaryLight },
+  cardInfo:     { flex: 1 },
+  cardTitle:    { ...Typography.h5, color: Colors.textPrimary, marginBottom: 2 },
+  cardCompany:  { ...Typography.bodySm, color: Colors.textSecondary, marginBottom: Spacing[1.5] },
+  cardMeta:     { flexDirection: 'row', alignItems: 'center', gap: Spacing[1.5], flexWrap: 'wrap' },
+  cardMetaText: { ...Typography.caption, color: Colors.textMuted },
+  metaDot:      { width: 3, height: 3, borderRadius: 2, backgroundColor: Colors.textMuted },
 });

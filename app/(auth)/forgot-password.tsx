@@ -1,14 +1,8 @@
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity,
+  KeyboardAvoidingView, Platform, ScrollView,
+  Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -17,268 +11,182 @@ import { useAuthStore } from '@/stores/authStore';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette,
+} from '@/constants/theme';
 
-const forgotPasswordSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
+const schema = z.object({
+  email: z.string().email('Please enter a valid email address'),
 });
-
-type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
+type Form = z.infer<typeof schema>;
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const [emailSent, setEmailSent] = useState(false);
   const { resetPassword, isLoading } = useAuthStore();
+  const [emailSent, setEmailSent] = useState(false);
 
-  const { control, handleSubmit, formState: { errors } } = useForm<ForgotPasswordFormData>({
-    resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: {
-      email: '',
-    },
+  const { control, handleSubmit, getValues, formState: { errors } } = useForm<Form>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: '' },
   });
 
-  const onSubmit = async (data: ForgotPasswordFormData) => {
+  const onSubmit = async (data: Form) => {
     const { error } = await resetPassword(data.email);
-
     if (error) {
-      Alert.alert('Error', error.message || 'Failed to send reset email. Please try again.');
+      Alert.alert('Error', error.message || 'Could not send reset link. Try again.');
     } else {
       setEmailSent(true);
     }
   };
 
+  // ── Success state ─────────────────────────────────────────────────────────
   if (emailSent) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.successContainer}>
-          <View style={styles.successIconContainer}>
-            <CheckCircle color="#10B981" size={64} />
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.successWrap}>
+          <View style={styles.successIconWrap}>
+            <CheckCircle color={Colors.success} size={56} strokeWidth={1.5} />
           </View>
           <Text style={styles.successTitle}>Check Your Email</Text>
-          <Text style={styles.successMessage}>
-            We've sent password reset instructions to your email address.
+          <Text style={styles.successBody}>
+            We've sent password reset instructions to{'\n'}
+            <Text style={styles.successEmail}>{getValues('email')}</Text>
           </Text>
-          <TouchableOpacity
-            style={styles.backToLoginButton}
+          <Button
             onPress={() => router.push('/(auth)/login')}
+            label="Back to Sign In"
+            size="lg"
+          />
+          <TouchableOpacity
+            style={styles.resendBtn}
+            onPress={() => setEmailSent(false)}
           >
-            <Text style={styles.backToLoginText}>Back to Sign In</Text>
+            <Text style={styles.resendText}>Didn't receive it? Try again</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ── Form state ────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+        style={styles.kav}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <ArrowLeft color="#1E293B" size={24} />
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Back */}
+          <TouchableOpacity style={G.backBtn} onPress={() => router.back()}>
+            <ArrowLeft color={Colors.textPrimary} size={20} strokeWidth={2} />
           </TouchableOpacity>
-          <Text style={styles.title}>Forgot Password?</Text>
-          <Text style={styles.subtitle}>
-            Enter your email address and we'll send you instructions to reset your password.
-          </Text>
-        </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          {/* Email */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address</Text>
+          {/* Heading */}
+          <View style={styles.headingBlock}>
+            <Text style={styles.heading}>Forgot Password?</Text>
+            <Text style={styles.subheading}>
+              Enter your email and we'll send you a link to reset your password.
+            </Text>
+          </View>
+
+          {/* Form */}
+          <View style={styles.form}>
             <Controller
               control={control}
               name="email"
               render={({ field: { onChange, value } }) => (
-                <View style={[styles.inputContainer, errors.email && styles.inputError]}>
-                  <Mail color="#94A3B8" size={20} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter your email"
-                    placeholderTextColor="#94A3B8"
-                    value={value}
-                    onChangeText={onChange}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
+                <Input
+                  label="Email Address"
+                  placeholder="you@example.com"
+                  value={value}
+                  onChangeText={onChange}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  leftIcon={<Mail color={Colors.textMuted} size={18} strokeWidth={2} />}
+                  error={errors.email?.message}
+                  required
+                />
               )}
             />
-            {errors.email && (
-              <Text style={styles.errorText}>{errors.email.message}</Text>
-            )}
+
+            <Button
+              onPress={handleSubmit(onSubmit)}
+              label="Send Reset Link"
+              loading={isLoading}
+              size="lg"
+            />
           </View>
 
-          {/* Submit Button */}
-          <TouchableOpacity
-            style={styles.submitButton}
-            onPress={handleSubmit(onSubmit)}
-            disabled={isLoading}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.submitButtonText}>Send Reset Link</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Remember your password?</Text>
-          <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-            <Text style={styles.footerLink}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Remember your password?</Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+              <Text style={styles.footerLink}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
+  container: { flex: 1, backgroundColor: Colors.bgCard },
+  kav:       { flex: 1 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: Space.pagePadding,
+    paddingTop: Space.pageTop,
+    paddingBottom: Spacing[8],
   },
-  keyboardView: {
-    flex: 1,
+
+  headingBlock: {
+    marginTop: Spacing[7],
+    marginBottom: Spacing[8],
+    gap: Spacing[2],
   },
-  header: {
-    marginTop: 12,
-    marginBottom: 40,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#64748B',
-    lineHeight: 22,
-  },
-  form: {
-    gap: 20,
-  },
-  inputGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#1E293B',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    backgroundColor: '#F8FAFC',
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1E293B',
-  },
-  errorText: {
-    fontSize: 13,
-    color: '#EF4444',
-    marginTop: 4,
-  },
-  submitButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  heading:    { ...Typography.h1, color: Colors.textPrimary },
+  subheading: { ...Typography.body, color: Colors.textSecondary, lineHeight: 24 },
+
+  form:   { gap: Spacing[5] },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 'auto',
-    marginBottom: 24,
-    gap: 8,
+    paddingTop: Spacing[8],
+    gap: Spacing[2],
   },
-  footerText: {
-    fontSize: 15,
-    color: '#64748B',
-  },
-  footerLink: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
-  successContainer: {
+  footerText: { ...Typography.body, color: Colors.textSecondary },
+  footerLink: { ...Typography.body, fontWeight: '600', color: Colors.primary },
+
+  // Success
+  successWrap: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: Space.pagePadding * 1.5,
+    gap: Spacing[5],
   },
-  successIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#ECFDF5',
+  successIconWrap: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    backgroundColor: Colors.successLight,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: Spacing[2],
   },
-  successTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  successMessage: {
-    fontSize: 16,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-  },
-  backToLoginButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-  },
-  backToLoginText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  successTitle: { ...Typography.h1, color: Colors.textPrimary, textAlign: 'center' },
+  successBody:  { ...Typography.bodyLg, color: Colors.textSecondary, textAlign: 'center', lineHeight: 26 },
+  successEmail: { color: Colors.primary, fontWeight: '600' },
+  resendBtn:    { paddingVertical: Spacing[2] },
+  resendText:   { ...Typography.body, color: Colors.textMuted },
 });

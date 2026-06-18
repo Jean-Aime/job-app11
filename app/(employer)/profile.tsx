@@ -1,74 +1,45 @@
 import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Image,
-  Alert,
-  ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  TextInput, Alert, ActivityIndicator, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  Building2,
-  Mail,
-  Phone,
-  MapPin,
-  Globe,
-  FileText,
-  Edit3,
-  CheckCircle,
-  AlertCircle,
-  Clock,
-  Settings,
-  LogOut,
-  ChevronRight,
-  Award,
-  Shield,
+  Building2, Phone, MapPin, Globe, Edit3,
+  CheckCircle, AlertCircle, Clock, LogOut, ChevronRight, Shield,
 } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { useSignOut } from '@/hooks/useSignOut';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette, VerificationConfig,
+} from '@/constants/theme';
 
 export default function EmployerProfileScreen() {
-  const router = useRouter();
   const { user, employer, fetchEmployerProfile } = useAuthStore();
   const { handleSignOut } = useSignOut();
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [formData, setFormData] = useState({
-    company_name: '',
-    industry: '',
-    website: '',
-    company_description: '',
-    address: '',
-    city: '',
-    country: '',
-    contact_person_name: '',
-    contact_person_phone: '',
-    contact_person_email: '',
-    employee_count: '',
-    founded_year: '',
+  const [form, setForm] = useState({
+    company_name: '', industry: '', website: '', company_description: '',
+    address: '', city: '', country: '',
+    contact_person_name: '', contact_person_phone: '', contact_person_email: '',
   });
 
   useEffect(() => {
     if (employer) {
-      setFormData({
-        company_name: employer.company_name || '',
-        industry: employer.industry || '',
-        website: employer.website || '',
-        company_description: employer.company_description || '',
-        address: employer.address || '',
-        city: employer.city || '',
-        country: employer.country || '',
-        contact_person_name: employer.contact_person_name || '',
-        contact_person_phone: employer.contact_person_phone || '',
-        contact_person_email: employer.contact_person_email || '',
-        employee_count: employer.employee_count?.toString() || '',
-        founded_year: employer.founded_year?.toString() || '',
+      setForm({
+        company_name:          employer.company_name           || '',
+        industry:              employer.industry               || '',
+        website:               employer.website               || '',
+        company_description:   employer.company_description   || '',
+        address:               employer.address               || '',
+        city:                  employer.city                  || '',
+        country:               employer.country               || '',
+        contact_person_name:   employer.contact_person_name   || '',
+        contact_person_phone:  employer.contact_person_phone  || '',
+        contact_person_email:  employer.contact_person_email  || '',
       });
     }
   }, [employer]);
@@ -76,513 +47,230 @@ export default function EmployerProfileScreen() {
   const handleSave = async () => {
     if (!employer) return;
     setLoading(true);
-
-    const { error } = await supabase
-      .from('employers')
-      .update({
-        company_name: formData.company_name,
-        industry: formData.industry,
-        website: formData.website,
-        company_description: formData.company_description,
-        address: formData.address,
-        city: formData.city,
-        country: formData.country,
-        contact_person_name: formData.contact_person_name,
-        contact_person_phone: formData.contact_person_phone,
-        contact_person_email: formData.contact_person_email,
-        employee_count: formData.employee_count ? parseInt(formData.employee_count) : null,
-        founded_year: formData.founded_year ? parseInt(formData.founded_year) : null,
-      })
-      .eq('id', employer.id);
-
+    const { error } = await supabase.from('employers').update({ ...form }).eq('id', employer.id);
     setLoading(false);
-    if (error) {
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
-    } else {
-      Alert.alert('Success', 'Profile updated successfully');
-      setEditing(false);
-      fetchEmployerProfile();
-    }
-  };
-
-  const getVerificationStatusColor = () => {
-    switch (employer?.verification_status) {
-      case 'approved':
-        return '#10B981';
-      case 'rejected':
-        return '#EF4444';
-      default:
-        return '#F59E0B';
-    }
-  };
-
-  const getVerificationStatusBadge = () => {
-    switch (employer?.verification_status) {
-      case 'approved':
-        return { icon: CheckCircle, text: 'Verified', bgColor: '#D1FAE5' };
-      case 'rejected':
-        return { icon: AlertCircle, text: 'Rejected', bgColor: '#FEE2E2' };
-      default:
-        return { icon: Clock, text: 'Pending Verification', bgColor: '#FEF3C7' };
-    }
+    if (error) { Alert.alert('Error', 'Failed to save.'); }
+    else { setEditing(false); fetchEmployerProfile(); }
   };
 
   if (!employer) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
-        </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={G.emptyCenter}><ActivityIndicator size="large" color={Colors.employer} /></View>
       </SafeAreaView>
     );
   }
 
-  const verificationBadge = getVerificationStatusBadge();
-  const VerificationIcon = verificationBadge.icon;
+  const vcKey = employer.verification_status || 'pending';
+  const vc    = VerificationConfig[vcKey] || VerificationConfig.pending;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Company Profile</Text>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => router.push('/(employer)/profile/settings')}
-          >
-            <Settings color="#64748B" size={24} />
-          </TouchableOpacity>
+        {/* Top bar */}
+        <View style={styles.topBar}>
+          <Text style={styles.pageTitle}>Company Profile</Text>
         </View>
 
-        {/* Company Card */}
-        <View style={styles.companyCard}>
-          <View style={styles.avatarContainer}>
-            {employer.company_logo_url ? (
-              <Image source={{ uri: employer.company_logo_url }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Building2 color="#FFFFFF" size={40} />
-              </View>
-            )}
-            <TouchableOpacity style={styles.editAvatarButton}>
-              <Edit3 color="#FFFFFF" size={16} />
+        {/* Hero card */}
+        <View style={styles.heroCard}>
+          <View style={styles.avatarWrap}>
+            {employer.company_logo_url
+              ? <Image source={{ uri: employer.company_logo_url }} style={styles.avatar} />
+              : <View style={styles.avatarFallback}><Building2 color={Palette.white} size={36} strokeWidth={1.5} /></View>}
+            <TouchableOpacity style={[styles.editAvatar, { backgroundColor: Colors.employer }]}>
+              <Edit3 color={Palette.white} size={14} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.companyName}>{formData.company_name || 'Your Company'}</Text>
+
+          <Text style={styles.companyName}>{form.company_name || 'Your Company'}</Text>
           <Text style={styles.companyEmail}>{user?.email}</Text>
 
-          {/* Verification Badge */}
-          <View style={[styles.verificationBadge, { backgroundColor: verificationBadge.bgColor }]}>
-            <VerificationIcon color={getVerificationStatusColor()} size={16} />
-            <Text style={[styles.verificationText, { color: getVerificationStatusColor() }]}>
-              {verificationBadge.text}
-            </Text>
+          <View style={[styles.verBadge, { backgroundColor: vc.bg }]}>
+            <View style={[styles.verDot, { backgroundColor: vc.color }]} />
+            <Text style={[styles.verText, { color: vc.color }]}>{vc.label}</Text>
           </View>
         </View>
 
+        {/* Edit form */}
         {editing ? (
-          /* Edit Form */
-          <View style={styles.editForm}>
+          <View style={styles.editSection}>
             <Text style={styles.sectionTitle}>Edit Company Profile</Text>
+            {[
+              { key: 'company_name',        label: 'Company Name *' },
+              { key: 'industry',            label: 'Industry' },
+              { key: 'website',             label: 'Website',       keyboard: 'url' as const },
+              { key: 'contact_person_name', label: 'Contact Name' },
+              { key: 'contact_person_phone',label: 'Contact Phone', keyboard: 'phone-pad' as const },
+              { key: 'contact_person_email',label: 'Contact Email', keyboard: 'email-address' as const },
+            ].map(f => (
+              <View key={f.key} style={styles.fieldWrap}>
+                <Text style={G.inputLabel}>{f.label}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={(form as any)[f.key]}
+                  onChangeText={v => setForm({ ...form, [f.key]: v })}
+                  keyboardType={f.keyboard}
+                  autoCapitalize={f.keyboard === 'url' || f.keyboard === 'email-address' ? 'none' : 'sentences'}
+                />
+              </View>
+            ))}
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Company Name *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.company_name}
-                onChangeText={(text) => setFormData({ ...formData, company_name: text })}
-              />
+            <View style={styles.rowFields}>
+              {['city', 'country'].map(k => (
+                <View key={k} style={styles.halfField}>
+                  <Text style={G.inputLabel}>{k.charAt(0).toUpperCase() + k.slice(1)}</Text>
+                  <TextInput style={styles.input} value={(form as any)[k]} onChangeText={v => setForm({ ...form, [k]: v })} />
+                </View>
+              ))}
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Industry</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.industry}
-                onChangeText={(text) => setFormData({ ...formData, industry: text })}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Website</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.website}
-                onChangeText={(text) => setFormData({ ...formData, website: text })}
-                keyboardType="url"
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Company Description</Text>
+            <View style={styles.fieldWrap}>
+              <Text style={G.inputLabel}>Company Description</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                value={formData.company_description}
-                onChangeText={(text) => setFormData({ ...formData, company_description: text })}
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>City</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.city}
-                  onChangeText={(text) => setFormData({ ...formData, city: text })}
-                />
-              </View>
-              <View style={styles.inputSpacer} />
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Country</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.country}
-                  onChangeText={(text) => setFormData({ ...formData, country: text })}
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Address</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.address}
-                onChangeText={(text) => setFormData({ ...formData, address: text })}
+                value={form.company_description}
+                onChangeText={v => setForm({ ...form, company_description: v })}
+                multiline numberOfLines={4} textAlignVertical="top"
               />
             </View>
 
             <View style={styles.editActions}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setEditing(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditing(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
-                {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveButtonText}>Save</Text>}
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: Colors.employer }]} onPress={handleSave} disabled={loading}>
+                {loading ? <ActivityIndicator color={Palette.white} /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
               </TouchableOpacity>
             </View>
           </View>
+
         ) : (
           <>
-            {/* Company Info */}
+            {/* Company info */}
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Company Information</Text>
-                <TouchableOpacity onPress={() => setEditing(true)}>
-                  <Edit3 color="#059669" size={18} />
+              <View style={G.sectionHeader}>
+                <Text style={G.sectionTitle}>Company Information</Text>
+                <TouchableOpacity onPress={() => setEditing(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Edit3 color={Colors.employer} size={18} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
               <View style={styles.infoCard}>
-                <View style={styles.infoRow}>
-                  <Building2 color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>{formData.industry || 'Add industry'}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <MapPin color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>
-                    {[formData.city, formData.country].filter(Boolean).join(', ') || 'Add location'}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Globe color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>{formData.website || 'Add website'}</Text>
-                </View>
+                {[
+                  { icon: Building2, val: form.industry || 'Add industry' },
+                  { icon: MapPin,    val: [form.city, form.country].filter(Boolean).join(', ') || 'Add location' },
+                  { icon: Globe,     val: form.website || 'Add website' },
+                ].map(({ icon: Icon, val }, i) => (
+                  <View key={i} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                    <Icon color={Colors.textMuted} size={18} strokeWidth={2} />
+                    <Text style={styles.infoVal}>{val}</Text>
+                  </View>
+                ))}
               </View>
-
-              {formData.company_description && (
-                <View style={styles.descriptionCard}>
-                  <Text style={styles.descriptionText}>{formData.company_description}</Text>
+              {form.company_description ? (
+                <View style={styles.descCard}>
+                  <Text style={styles.descText}>{form.company_description}</Text>
                 </View>
-              )}
+              ) : null}
             </View>
 
-            {/* Contact Person */}
+            {/* Contact */}
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Contact Person</Text>
-                <TouchableOpacity onPress={() => setEditing(true)}>
-                  <Edit3 color="#059669" size={18} />
+              <View style={G.sectionHeader}>
+                <Text style={G.sectionTitle}>Contact Person</Text>
+                <TouchableOpacity onPress={() => setEditing(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Edit3 color={Colors.employer} size={18} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
               <View style={styles.infoCard}>
-                <View style={styles.infoRow}>
-                  <Phone color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>{formData.contact_person_phone || 'Add phone'}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Mail color="#64748B" size={20} />
-                  <Text style={styles.infoValue}>{formData.contact_person_email || 'Add email'}</Text>
-                </View>
+                {[
+                  { icon: Phone, val: form.contact_person_phone || 'Add phone' },
+                ].map(({ icon: Icon, val }, i) => (
+                  <View key={i} style={[styles.infoRow, i > 0 && styles.infoRowBorder]}>
+                    <Icon color={Colors.textMuted} size={18} strokeWidth={2} />
+                    <Text style={styles.infoVal}>{val}</Text>
+                  </View>
+                ))}
               </View>
             </View>
 
-            {/* Verification Documents */}
+            {/* Verification */}
             <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Verification</Text>
-              </View>
-              <TouchableOpacity style={styles.verificationCard}>
-                <Shield color="#059669" size={24} />
-                <View style={styles.verificationInfo}>
-                  <Text style={styles.verificationTitle}>Upload Documents</Text>
-                  <Text style={styles.verificationDesc}>
-                    Submit business registration and tax documents for verification
-                  </Text>
+              <Text style={[G.sectionTitle, { marginBottom: Spacing[3] }]}>Verification</Text>
+              <TouchableOpacity style={styles.verCard}>
+                <View style={[G.iconMd, { backgroundColor: Colors.employerLight }]}>
+                  <Shield color={Colors.employer} size={20} strokeWidth={2} />
                 </View>
-                <ChevronRight color="#94A3B8" size={20} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.verCardTitle}>Upload Documents</Text>
+                  <Text style={styles.verCardDesc}>Business registration & tax documents</Text>
+                </View>
+                <ChevronRight color={Colors.textMuted} size={18} strokeWidth={2} />
               </TouchableOpacity>
             </View>
           </>
         )}
 
-        {/* Sign Out */}
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <LogOut color="#EF4444" size={20} />
+        {/* Sign out */}
+        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+          <LogOut color={Colors.error} size={18} strokeWidth={2} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
-        <View style={styles.bottomPadding} />
+        <View style={G.listBottom} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
+  container: { ...G.screen },
+
+  topBar: { ...G.rowBetween, paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3] },
+  pageTitle: { ...Typography.h2, color: Colors.textPrimary },
+
+  heroCard: {
+    alignItems: 'center', marginHorizontal: Space.pagePadding, marginBottom: Spacing[2],
+    padding: Space.cardPaddingLg,
+    backgroundColor: Colors.bgCard, borderRadius: Radius.xl,
+    borderWidth: 1, borderColor: Colors.border,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  settingsButton: {
-    padding: 8,
-  },
-  companyCard: {
-    alignItems: 'center',
-    marginHorizontal: 20,
-    marginTop: 24,
-    padding: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#059669',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editAvatarButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#059669',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-  },
-  companyName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  companyEmail: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 16,
-  },
-  verificationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-  },
-  verificationText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  infoValue: {
-    fontSize: 15,
-    color: '#1E293B',
-    flex: 1,
-  },
-  descriptionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  descriptionText: {
-    fontSize: 15,
-    color: '#475569',
-    lineHeight: 24,
-  },
-  verificationCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 12,
-  },
-  verificationInfo: {
-    flex: 1,
-  },
-  verificationTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  verificationDesc: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  signOutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginHorizontal: 20,
-    marginTop: 32,
-    padding: 16,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 16,
-  },
-  signOutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
-  bottomPadding: {
-    height: 100,
-  },
-  editForm: {
-    paddingHorizontal: 20,
-    marginTop: 24,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: '#1E293B',
-  },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  row: {
-    flexDirection: 'row',
-  },
-  inputSpacer: {
-    width: 12,
-  },
-  editActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  saveButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    backgroundColor: '#059669',
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  avatarWrap:    { position: 'relative', marginBottom: Spacing[4] },
+  avatar:        { width: 96, height: 96, borderRadius: 48 },
+  avatarFallback:{ width: 96, height: 96, borderRadius: 48, backgroundColor: Colors.employer, alignItems: 'center', justifyContent: 'center' },
+  editAvatar:    { position: 'absolute', bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: Colors.bgCard },
+  companyName:   { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing[0.5] },
+  companyEmail:  { ...Typography.bodySm, color: Colors.textSecondary, marginBottom: Spacing[4] },
+  verBadge:      { flexDirection: 'row', alignItems: 'center', gap: Spacing[1.5], paddingHorizontal: Spacing[3], paddingVertical: Spacing[1.5], borderRadius: Radius.full },
+  verDot:        { width: 6, height: 6, borderRadius: 3 },
+  verText:       { ...Typography.label, fontWeight: '600' },
+
+  section:       { paddingHorizontal: Space.pagePadding, marginTop: Space.sectionGap },
+  sectionTitle:  { ...G.sectionTitle },
+
+  infoCard:      { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: Space.cardPadding },
+  infoRow:       { flexDirection: 'row', alignItems: 'center', gap: Spacing[3], paddingVertical: Spacing[3.5] },
+  infoRowBorder: { borderTopWidth: 1, borderTopColor: Colors.divider },
+  infoVal:       { ...Typography.body, color: Colors.textPrimary, flex: 1 },
+  descCard:      { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.border, padding: Space.cardPadding, marginTop: Spacing[3] },
+  descText:      { ...Typography.body, color: Colors.textSecondary, lineHeight: 24 },
+
+  verCard:       { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: Space.cardPadding, borderWidth: 1, borderColor: Colors.border, gap: Spacing[3] },
+  verCardTitle:  { ...Typography.h5, color: Colors.textPrimary },
+  verCardDesc:   { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
+
+  editSection:   { paddingHorizontal: Space.pagePadding, marginTop: Space.sectionGap, gap: Spacing[4] },
+  fieldWrap:     { gap: Spacing[1.5] },
+  rowFields:     { flexDirection: 'row', gap: Spacing[3] },
+  halfField:     { flex: 1, gap: Spacing[1.5] },
+  input:         { backgroundColor: Colors.bgCard, borderWidth: 1.5, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Space.inputPaddingH, paddingVertical: Space.inputPaddingV, ...Typography.input, color: Colors.textPrimary, minHeight: 52 },
+  textArea:      { minHeight: 100, textAlignVertical: 'top', paddingTop: Spacing[3] },
+  editActions:   { flexDirection: 'row', gap: Spacing[3], marginTop: Spacing[2] },
+  cancelBtn:     { flex: 1, height: 52, borderRadius: Radius.md, backgroundColor: Colors.bg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
+  cancelBtnText: { ...Typography.button, color: Colors.textSecondary },
+  saveBtn:       { flex: 1, height: 52, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  saveBtnText:   { ...Typography.button, color: Palette.white },
+
+  signOutBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing[2], marginHorizontal: Space.pagePadding, marginTop: Space.sectionGap, padding: Spacing[4], backgroundColor: Colors.errorLight, borderRadius: Radius.lg },
+  signOutText:   { ...Typography.button, color: Colors.error },
 });

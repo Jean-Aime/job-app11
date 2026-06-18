@@ -1,280 +1,158 @@
 import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Alert,
-  ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Image, Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-  ArrowLeft,
-  MapPin,
-  Briefcase,
-  Clock,
-  DollarSign,
-  Building2,
-  Heart,
-  Share2,
-  Calendar,
-  Users,
-  CheckCircle,
+  ArrowLeft, MapPin, Briefcase, Clock, DollarSign, Building2,
+  Heart, Share2, Calendar, Users, CheckCircle,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { Job } from '@/types/database';
 import { useAuthStore } from '@/stores/authStore';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, Palette,
+} from '@/constants/theme';
+import { formatSalary, formatDate } from '@/utils/formatters';
 
 export default function JobDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { jobSeeker, isAuthenticated } = useAuthStore();
-  const [job, setJob] = useState<Job | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [applying, setApplying] = useState(false);
-  const [hasApplied, setHasApplied] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-  const [savedJobId, setSavedJobId] = useState<string | null>(null);
+  const [job,       setJob]       = useState<Job | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [applying,  setApplying]  = useState(false);
+  const [hasApplied,setHasApplied]= useState(false);
+  const [isSaved,   setIsSaved]   = useState(false);
+  const [savedId,   setSavedId]   = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchJob();
-  }, [id]);
+  useEffect(() => { fetchJob(); }, [id]);
 
   const fetchJob = async () => {
     const { data, error } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        employer:employers(*),
-        category:job_categories(name),
-        required_skills:job_skills(
-          *,
-          skill:skills(name)
-        )
-      `)
-      .eq('id', id)
-      .single();
+      .select('*, employer:employers(*), category:job_categories(name), required_skills:job_skills(*, skill:skills(name))')
+      .eq('id', id).single();
+    if (error) { Alert.alert('Error', 'Failed to load job'); router.back(); return; }
+    setJob(data);
+    await supabase.from('jobs').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id);
 
-    if (error) {
-      console.error('Error fetching job:', error);
-      Alert.alert('Error', 'Failed to load job details');
-      router.back();
-    } else {
-      setJob(data);
-      // Increment view count
-      await supabase
-        .from('jobs')
-        .update({ view_count: (data.view_count || 0) + 1 })
-        .eq('id', id);
-    }
-
-    // Check if user has already applied
     if (jobSeeker) {
-      const { data: appCheck } = await supabase
-        .from('applications')
-        .select('id')
-        .eq('job_id', id)
-        .eq('job_seeker_id', jobSeeker.id)
-        .single();
-
-      if (appCheck) setHasApplied(true);
-
-      // Check if job is saved
-      const { data: savedCheck } = await supabase
-        .from('saved_jobs')
-        .select('id')
-        .eq('job_id', id)
-        .eq('job_seeker_id', jobSeeker.id)
-        .single();
-
-      if (savedCheck) {
-        setIsSaved(true);
-        setSavedJobId(savedCheck.id);
-      }
+      const [{ data: app }, { data: saved }] = await Promise.all([
+        supabase.from('applications').select('id').eq('job_id', id).eq('job_seeker_id', jobSeeker.id).single(),
+        supabase.from('saved_jobs').select('id').eq('job_id', id).eq('job_seeker_id', jobSeeker.id).single(),
+      ]);
+      if (app)  setHasApplied(true);
+      if (saved){ setIsSaved(true); setSavedId(saved.id); }
     }
-
     setLoading(false);
   };
 
   const toggleSave = async () => {
-    if (!jobSeeker) {
-      Alert.alert('Login Required', 'Please login to save jobs', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Login', onPress: () => router.push('/(auth)') },
-      ]);
-      return;
-    }
-
-    if (isSaved && savedJobId) {
-      // Remove from saved
-      const { error } = await supabase.from('saved_jobs').delete().eq('id', savedJobId);
-      if (!error) {
-        setIsSaved(false);
-        setSavedJobId(null);
-      }
+    if (!jobSeeker) { Alert.alert('Login required', 'Please sign in to save jobs'); return; }
+    if (isSaved && savedId) {
+      await supabase.from('saved_jobs').delete().eq('id', savedId);
+      setIsSaved(false); setSavedId(null);
     } else {
-      // Add to saved
-      const { data, error } = await supabase.from('saved_jobs').insert({
-        job_id: id,
-        job_seeker_id: jobSeeker.id,
-      }).select('id').single();
-
-      if (!error && data) {
-        setIsSaved(true);
-        setSavedJobId(data.id);
-      }
+      const { data } = await supabase.from('saved_jobs')
+        .insert({ job_id: id, job_seeker_id: jobSeeker.id }).select('id').single();
+      if (data) { setIsSaved(true); setSavedId(data.id); }
     }
   };
 
   const handleApply = async () => {
-    if (!isAuthenticated || !jobSeeker) {
-      Alert.alert('Login Required', 'Please login to apply for this job', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Login', onPress: () => router.push('/(auth)') },
-      ]);
-      return;
-    }
-
+    if (!isAuthenticated || !jobSeeker) { Alert.alert('Login required', 'Please sign in to apply'); return; }
     setApplying(true);
-    const { error } = await supabase.from('applications').insert({
-      job_id: id,
-      job_seeker_id: jobSeeker.id,
-      status: 'pending',
-    });
-
+    const { error } = await supabase.from('applications').insert({ job_id: id, job_seeker_id: jobSeeker.id, status: 'pending' });
     setApplying(false);
-    if (error) {
-      if (error.code === '23505') {
-        Alert.alert('Already Applied', 'You have already applied for this job.');
-        setHasApplied(true);
-      } else {
-        Alert.alert('Error', 'Failed to submit application. Please try again.');
-      }
-    } else {
-      Alert.alert('Success', 'Your application has been submitted successfully!');
-      setHasApplied(true);
-    }
-  };
-
-  const formatSalary = (min: number | null, max: number | null, currency: string) => {
-    if (!min && !max) return 'Salary not specified';
-    const curr = currency || 'RWF';
-    if (min && max) return `${curr} ${min.toLocaleString()} - ${max.toLocaleString()}`;
-    if (min) return `From ${curr} ${min.toLocaleString()}`;
-    return `Up to ${curr} ${max?.toLocaleString()}`;
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    if (error?.code === '23505') { setHasApplied(true); Alert.alert('Already Applied', 'You already applied for this job.'); }
+    else if (error) { Alert.alert('Error', 'Failed to submit. Try again.'); }
+    else { setHasApplied(true); Alert.alert('Applied!', 'Your application was submitted successfully.'); }
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView style={styles.loading} edges={['top']}>
+        <ActivityIndicator size="large" color={Colors.primary} />
       </SafeAreaView>
     );
   }
-
   if (!job) return null;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft color="#1E293B" size={24} />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {/* Nav bar */}
+        <View style={styles.navBar}>
+          <TouchableOpacity style={G.backBtn} onPress={() => router.back()}>
+            <ArrowLeft color={Colors.textPrimary} size={20} strokeWidth={2} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.shareButton}>
-            <Share2 color="#64748B" size={20} />
+          <TouchableOpacity style={G.backBtn}>
+            <Share2 color={Colors.textSecondary} size={18} strokeWidth={2} />
           </TouchableOpacity>
         </View>
 
-        {/* Company Header */}
+        {/* Company header */}
         <View style={styles.companyHeader}>
           <View style={styles.companyLogo}>
-            {job.employer?.company_logo_url ? (
-              <Image source={{ uri: job.employer.company_logo_url }} style={styles.logoImage} />
-            ) : (
-              <Building2 color="#2563EB" size={40} />
-            )}
+            {job.employer?.company_logo_url
+              ? <Image source={{ uri: job.employer.company_logo_url }} style={styles.logoImg} />
+              : <Building2 color={Colors.primary} size={36} strokeWidth={1.5} />}
           </View>
           <Text style={styles.jobTitle}>{job.title}</Text>
           <Text style={styles.companyName}>{job.employer?.company_name}</Text>
           <View style={styles.locationRow}>
-            <MapPin color="#94A3B8" size={16} />
-            <Text style={styles.locationText}>
-              {job.city || job.location || 'Remote'}
-            </Text>
+            <MapPin color={Colors.textMuted} size={14} strokeWidth={2} />
+            <Text style={styles.locationText}>{job.city || job.location || 'Remote'}</Text>
           </View>
         </View>
 
-        {/* Quick Info Cards */}
-        <View style={styles.quickInfo}>
-          <View style={styles.quickInfoItem}>
-            <Briefcase color="#2563EB" size={20} />
-            <Text style={styles.quickInfoLabel}>Type</Text>
-            <Text style={styles.quickInfoValue}>
-              {job.employment_type.replace('_', ' ')}
-            </Text>
-          </View>
-          <View style={styles.quickInfoDivider} />
-          <View style={styles.quickInfoItem}>
-            <Clock color="#2563EB" size={20} />
-            <Text style={styles.quickInfoLabel}>Experience</Text>
-            <Text style={styles.quickInfoValue}>
-              {job.required_experience_years}+ years
-            </Text>
-          </View>
-          <View style={styles.quickInfoDivider} />
-          <View style={styles.quickInfoItem}>
-            <Users color="#2563EB" size={20} />
-            <Text style={styles.quickInfoLabel}>Positions</Text>
-            <Text style={styles.quickInfoValue}>{job.positions_available}</Text>
-          </View>
+        {/* Quick stats */}
+        <View style={styles.statsRow}>
+          {[
+            { icon: Briefcase, label: 'Type',       value: job.employment_type.replace(/_/g, ' ') },
+            { icon: Clock,     label: 'Experience',  value: `${job.required_experience_years}+ yrs` },
+            { icon: Users,     label: 'Positions',   value: String(job.positions_available) },
+          ].map(({ icon: Icon, label, value }, i) => (
+            <View key={label} style={[styles.statItem, i > 0 && styles.statItemBorder]}>
+              <Icon color={Colors.primary} size={18} strokeWidth={2} />
+              <Text style={styles.statLabel}>{label}</Text>
+              <Text style={styles.statValue}>{value}</Text>
+            </View>
+          ))}
         </View>
 
-        {/* Salary Card */}
-        <View style={styles.salaryCard}>
-          <DollarSign color="#059669" size={24} />
-          <View>
-            <Text style={styles.salaryLabel}>Salary Range</Text>
-            <Text style={styles.salaryValue}>
-              {formatSalary(job.salary_min, job.salary_max, job.salary_currency)}
-            </Text>
+        {/* Salary */}
+        {(job.salary_min || job.salary_max) && (
+          <View style={styles.salaryCard}>
+            <DollarSign color={Colors.employer} size={20} strokeWidth={2} />
+            <View>
+              <Text style={styles.salaryLabel}>Salary Range</Text>
+              <Text style={styles.salaryValue}>{formatSalary(job.salary_min, job.salary_max, job.salary_currency)}</Text>
+            </View>
           </View>
-        </View>
+        )}
 
-        {/* Job Description */}
+        {/* Description */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Job Description</Text>
+          <Text style={G.sectionTitle}>Job Description</Text>
           <Text style={styles.description}>{job.description}</Text>
         </View>
 
-        {/* Required Skills */}
-        {job.required_skills && job.required_skills.length > 0 && (
+        {/* Required skills */}
+        {job.required_skills?.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Required Skills</Text>
+            <Text style={G.sectionTitle}>Required Skills</Text>
             <View style={styles.skillsList}>
-              {job.required_skills.map((skill: any) => (
-                <View key={skill.id} style={styles.skillItem}>
-                  <CheckCircle color="#059669" size={16} />
-                  <View style={styles.skillInfo}>
-                    <Text style={styles.skillName}>{skill.skill?.name}</Text>
-                    {skill.minimum_years > 0 && (
-                      <Text style={styles.skillRequirement}>
-                        {skill.minimum_years}+ years
-                      </Text>
-                    )}
+              {(job.required_skills as any[]).map((s: any) => (
+                <View key={s.id} style={styles.skillRow}>
+                  <CheckCircle color={Colors.employer} size={15} strokeWidth={2.5} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.skillName}>{s.skill?.name}</Text>
+                    {s.minimum_years > 0 && <Text style={styles.skillYears}>{s.minimum_years}+ years</Text>}
                   </View>
                 </View>
               ))}
@@ -285,7 +163,7 @@ export default function JobDetailsScreen() {
         {/* Deadline */}
         {job.deadline && (
           <View style={styles.deadlineCard}>
-            <Calendar color="#EF4444" size={20} />
+            <Calendar color={Colors.error} size={18} strokeWidth={2} />
             <View>
               <Text style={styles.deadlineLabel}>Application Deadline</Text>
               <Text style={styles.deadlineValue}>{formatDate(job.deadline)}</Text>
@@ -293,57 +171,47 @@ export default function JobDetailsScreen() {
           </View>
         )}
 
-        {/* Company Info */}
+        {/* About company */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About the Company</Text>
+          <Text style={[G.sectionTitle, { marginBottom: Spacing[3] }]}>About the Company</Text>
           <View style={styles.companyCard}>
             <View style={styles.companyCardHeader}>
-              {job.employer?.company_logo_url ? (
-                <Image source={{ uri: job.employer.company_logo_url }} style={styles.companyLogoSmall} />
-              ) : (
-                <View style={styles.companyLogoPlaceholder}>
-                  <Building2 color="#64748B" size={24} />
-                </View>
-              )}
-              <View>
+              {job.employer?.company_logo_url
+                ? <Image source={{ uri: job.employer.company_logo_url }} style={styles.companyLogoSm} />
+                : <View style={styles.companyLogoSmFallback}><Building2 color={Colors.textMuted} size={20} strokeWidth={1.8} /></View>}
+              <View style={{ flex: 1 }}>
                 <Text style={styles.companyCardName}>{job.employer?.company_name}</Text>
-                <Text style={styles.companyCardIndustry}>{job.employer?.industry}</Text>
+                {job.employer?.industry && <Text style={styles.companyIndustry}>{job.employer.industry}</Text>}
               </View>
             </View>
             {job.employer?.company_description && (
-              <Text style={styles.companyDescription}>{job.employer.company_description}</Text>
+              <Text style={styles.companyDesc}>{job.employer.company_description}</Text>
             )}
           </View>
         </View>
 
-        <View style={styles.bottomPadding} />
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Bottom Actions */}
-      <View style={styles.bottomActions}>
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={toggleSave}
-        >
-          <Heart color={isSaved ? '#EF4444' : '#64748B'} size={24} fill={isSaved ? '#EF4444' : 'transparent'} />
+      {/* Bottom CTA */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity style={styles.saveBtn} onPress={toggleSave}>
+          <Heart
+            color={isSaved ? Colors.error : Colors.textSecondary}
+            size={22}
+            strokeWidth={2}
+            fill={isSaved ? Colors.error : 'transparent'}
+          />
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.applyButton}
+          style={[styles.applyBtn, hasApplied && styles.applyBtnDone]}
           onPress={handleApply}
           disabled={applying || hasApplied}
+          activeOpacity={0.85}
         >
-          <LinearGradient
-            colors={hasApplied ? ['#94A3B8', '#CBD5E1'] : ['#2563EB', '#3B82F6']}
-            style={styles.applyButtonGradient}
-          >
-            {applying ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.applyButtonText}>
-                {hasApplied ? 'Applied' : 'Apply Now'}
-              </Text>
-            )}
-          </LinearGradient>
+          {applying
+            ? <ActivityIndicator color={Palette.white} />
+            : <Text style={styles.applyBtnText}>{hasApplied ? '✓ Applied' : 'Apply Now'}</Text>}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -351,259 +219,124 @@ export default function JobDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  shareButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  container: { ...G.screenWhite },
+  loading:   { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.bgCard },
+  scroll:    { paddingBottom: 20 },
+
+  navBar: { ...G.rowBetween, paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[2] },
+
   companyHeader: {
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingHorizontal: Space.pagePadding,
+    paddingVertical: Spacing[6],
   },
   companyLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+    width: 80, height: 80, borderRadius: Radius.xl,
+    backgroundColor: Colors.bg,
+    borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: Spacing[4], overflow: 'hidden',
   },
-  logoImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-  },
-  jobTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  companyName: {
-    fontSize: 16,
-    color: '#64748B',
-    marginBottom: 8,
-  },
-  locationRow: {
+  logoImg:      { width: 80, height: 80 },
+  jobTitle:     { ...Typography.h2, color: Colors.textPrimary, textAlign: 'center', marginBottom: Spacing[1.5] },
+  companyName:  { ...Typography.bodyLg, color: Colors.textSecondary, marginBottom: Spacing[2] },
+  locationRow:  { flexDirection: 'row', alignItems: 'center', gap: Spacing[1] },
+  locationText: { ...Typography.bodySm, color: Colors.textSecondary },
+
+  statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    marginHorizontal: Space.pagePadding,
+    backgroundColor: Colors.bg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing[4],
   },
-  locationText: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  quickInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 20,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 16,
-  },
-  quickInfoItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  quickInfoLabel: {
-    fontSize: 12,
-    color: '#94A3B8',
-    marginTop: 8,
-  },
-  quickInfoValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 4,
-  },
-  quickInfoDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#E2E8F0',
-  },
+  statItem:       { flex: 1, alignItems: 'center', gap: Spacing[1] },
+  statItemBorder: { borderLeftWidth: 1, borderLeftColor: Colors.border },
+  statLabel:      { ...Typography.caption, color: Colors.textMuted, marginTop: Spacing[1] },
+  statValue:      { ...Typography.label, color: Colors.textPrimary, fontWeight: '600', textAlign: 'center' },
+
   salaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 20,
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 16,
-    gap: 12,
+    gap: Spacing[3],
+    marginHorizontal: Space.pagePadding,
+    marginTop: Spacing[4],
+    padding: Space.cardPadding,
+    backgroundColor: Colors.employerLight,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.employerMid,
   },
-  salaryLabel: {
-    fontSize: 12,
-    color: '#059669',
-  },
-  salaryValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 4,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 15,
-    color: '#475569',
-    lineHeight: 24,
-  },
-  skillsList: {
-    gap: 12,
-  },
-  skillItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  skillInfo: {
-    flex: 1,
-  },
-  skillName: {
-    fontSize: 15,
-    color: '#1E293B',
-    fontWeight: '500',
-  },
-  skillRequirement: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 2,
-  },
+  salaryLabel: { ...Typography.caption, color: Colors.employer },
+  salaryValue: { ...Typography.h4, color: Colors.textPrimary, marginTop: 2 },
+
+  section:     { paddingHorizontal: Space.pagePadding, marginTop: Space.sectionGap },
+  description: { ...Typography.bodyLg, color: Colors.textSecondary, lineHeight: 28 },
+
+  skillsList: { gap: Spacing[3] },
+  skillRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing[2.5] },
+  skillName:  { ...Typography.body, color: Colors.textPrimary, fontWeight: '500' },
+  skillYears: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
+
   deadlineCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 20,
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 16,
-    gap: 12,
+    gap: Spacing[3],
+    marginHorizontal: Space.pagePadding,
+    marginTop: Spacing[4],
+    padding: Space.cardPadding,
+    backgroundColor: Colors.errorLight,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.errorMid,
   },
-  deadlineLabel: {
-    fontSize: 12,
-    color: '#EF4444',
-  },
-  deadlineValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 4,
-  },
+  deadlineLabel: { ...Typography.caption, color: Colors.error },
+  deadlineValue: { ...Typography.h5, color: Colors.textPrimary, marginTop: 2 },
+
   companyCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: Colors.bg,
+    borderRadius: Radius.lg,
+    padding: Space.cardPadding,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: Spacing[3],
   },
-  companyCardHeader: {
+  companyCardHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing[3] },
+  companyLogoSm: { width: 44, height: 44, borderRadius: Radius.md },
+  companyLogoSmFallback: {
+    width: 44, height: 44, borderRadius: Radius.md,
+    backgroundColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  companyCardName: { ...Typography.h5, color: Colors.textPrimary },
+  companyIndustry: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
+  companyDesc:     { ...Typography.body, color: Colors.textSecondary, lineHeight: 24 },
+
+  bottomBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  companyLogoSmall: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    marginRight: 12,
-  },
-  companyLogoPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  companyCardName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  companyCardIndustry: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  companyDescription: {
-    fontSize: 14,
-    color: '#475569',
-    lineHeight: 22,
-    marginTop: 12,
-  },
-  bottomPadding: {
-    height: 120,
-  },
-  bottomActions: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: 32,
-    backgroundColor: '#FFFFFF',
-    borderTopColor: '#E2E8F0',
+    paddingHorizontal: Space.pagePadding,
+    paddingVertical: Spacing[4],
+    paddingBottom: Spacing[8],
+    backgroundColor: Colors.bgCard,
     borderTopWidth: 1,
-    gap: 12,
+    borderTopColor: Colors.border,
+    gap: Spacing[3],
   },
-  saveButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
+  saveBtn: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: Colors.bg,
+    borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
   },
-  applyButton: {
-    flex: 1,
+  applyBtn: {
+    flex: 1, height: 52, borderRadius: Radius.lg,
+    backgroundColor: Colors.primary,
+    alignItems: 'center', justifyContent: 'center',
   },
-  applyButtonGradient: {
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: 'center',
-  },
-  applyButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  applyBtnDone: { backgroundColor: Colors.textMuted },
+  applyBtnText: { ...Typography.buttonLg, color: Palette.white },
 });

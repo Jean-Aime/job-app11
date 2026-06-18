@@ -1,289 +1,110 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  Image,
+  View, Text, StyleSheet, FlatList, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  FileCheck,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Users,
-  ChevronRight,
-} from 'lucide-react-native';
+import { FileCheck } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { Application } from '@/types/database';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { JobCardSkeleton } from '@/components/ui/SkeletonLoader';
+import { EmptyState } from '@/components/ui/EmptyState';
+import {
+  Colors, Typography, Spacing, Radius, Space, G, StatusConfig,
+} from '@/constants/theme';
+import { formatDate } from '@/utils/formatters';
+
+const FILTERS = [
+  { value: 'all',         label: 'All' },
+  { value: 'pending',     label: 'Pending' },
+  { value: 'shortlisted', label: 'Shortlisted' },
+  { value: 'accepted',    label: 'Accepted' },
+  { value: 'rejected',    label: 'Rejected' },
+];
 
 export default function AdminApplicationsScreen() {
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [applications, setApplications] = useState<any[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [filter,       setFilter]       = useState('all');
 
-  useEffect(() => {
-    fetchApplications();
-  }, [selectedStatus]);
-
-  const fetchApplications = async () => {
+  const fetchApplications = useCallback(async () => {
     setLoading(true);
-
-    let query = supabase
+    let q = supabase
       .from('applications')
-      .select(`
-        *,
-        job:jobs(title),
-        job_seeker:job_seekers(full_name, profile_photo_url)
-      `)
+      .select('*, job:jobs(title), job_seeker:job_seekers(full_name, profile_photo_url)')
       .order('created_at', { ascending: false });
-
-    if (selectedStatus !== 'all') {
-      query = query.eq('status', selectedStatus);
-    }
-
-    const { data } = await query;
+    if (filter !== 'all') q = q.eq('status', filter);
+    const { data } = await q;
     if (data) setApplications(data);
     setLoading(false);
     setRefreshing(false);
-  };
+  }, [filter]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchApplications();
-  };
+  useEffect(() => { fetchApplications(); }, [fetchApplications]);
 
-  const filterButtons = [
-    { value: 'all', label: 'All' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'accepted', label: 'Accepted' },
-    { value: 'rejected', label: 'Rejected' },
-  ];
-
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case 'accepted':
-        return { icon: CheckCircle, color: '#10B981', bgColor: '#D1FAE5' };
-      case 'rejected':
-        return { icon: XCircle, color: '#EF4444', bgColor: '#FEE2E2' };
-      case 'pending':
-        return { icon: Clock, color: '#F59E0B', bgColor: '#FEF3C7' };
-      default:
-        return { icon: Clock, color: '#64748B', bgColor: '#F1F5F9' };
-    }
-  };
-
-  const renderApplication = ({ item }: { item: Application & any }) => {
-    const config = getStatusConfig(item.status);
-    const StatusIcon = config.icon;
-
+  const renderItem = ({ item }: { item: any }) => {
+    const sc = StatusConfig[item.status] || StatusConfig.pending;
     return (
-      <TouchableOpacity style={styles.applicationCard}>
-        <View style={styles.applicationContent}>
-          <View style={styles.avatar}>
-            {item.job_seeker?.profile_photo_url ? (
-              <Image source={{ uri: item.job_seeker.profile_photo_url }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarPlaceholder}>
-                {item.job_seeker?.full_name?.charAt(0) || '?'}
-              </Text>
-            )}
+      <View style={styles.card}>
+        <View style={styles.cardInner}>
+          <Avatar uri={item.job_seeker?.profile_photo_url} name={item.job_seeker?.full_name} size="md" color={Colors.admin} />
+          <View style={styles.info}>
+            <Text style={styles.name}>{item.job_seeker?.full_name}</Text>
+            <Text style={styles.jobTitle} numberOfLines={1}>{item.job?.title}</Text>
+            <Text style={styles.date}>{formatDate(item.created_at)}</Text>
           </View>
-          <View style={styles.applicationInfo}>
-            <Text style={styles.applicantName}>{item.job_seeker?.full_name}</Text>
-            <Text style={styles.jobTitle}>{item.job?.title}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: config.bgColor }]}>
-              <StatusIcon color={config.color} size={12} />
-              <Text style={[styles.statusText, { color: config.color }]}>
-                {item.status}
-              </Text>
-            </View>
-          </View>
-          <ChevronRight color="#94A3B8" size={20} />
+          <Badge label={sc.label} color={sc.color} bg={sc.bg} dot size="sm" />
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Applications</Text>
-        <Text style={styles.headerSubtitle}>
-          {applications.length} application{applications.length !== 1 ? 's' : ''}
-        </Text>
+        <Text style={styles.heading}>Applications</Text>
+        {!loading && <Text style={styles.count}>{applications.length} total</Text>}
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        {filterButtons.map((button) => (
-          <TouchableOpacity
-            key={button.value}
-            style={[
-              styles.filterButton,
-              selectedStatus === button.value && styles.filterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus(button.value)}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                selectedStatus === button.value && styles.filterTextActive,
-              ]}
-            >
-              {button.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.filterWrap}>
+        <FlatList
+          data={FILTERS} horizontal showsHorizontalScrollIndicator={false}
+          keyExtractor={i => i.value} contentContainerStyle={styles.filterList}
+          renderItem={({ item }) => (
+            <FilterChip label={item.label} active={filter === item.value}
+              onPress={() => setFilter(item.value)} color={Colors.admin} />
+          )}
+        />
       </View>
 
-      {/* Applications List */}
       <FlatList
-        data={applications}
-        renderItem={renderApplication}
-        keyExtractor={(item) => item.id}
+        data={applications} renderItem={renderItem} keyExtractor={i => i.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#8B5CF6']} />
-        }
-        ListEmptyComponent={
-          loading ? undefined : (
-            <View style={styles.emptyState}>
-              <FileCheck color="#CBD5E1" size={48} />
-              <Text style={styles.emptyStateTitle}>No Applications</Text>
-            </View>
-          )
-        }
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchApplications(); }} tintColor={Colors.admin} />}
+        ListHeaderComponent={loading ? <View>{[1,2,3].map(k => <JobCardSkeleton key={k} />)}</View> : null}
+        ListEmptyComponent={!loading ? (
+          <EmptyState icon={<FileCheck color={Colors.textMuted} size={40} strokeWidth={1.5} />} title="No applications found" />
+        ) : null}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  filterButtonActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
-  },
-  listContainer: {
-    padding: 20,
-    paddingTop: 8,
-  },
-  applicationCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  applicationContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  avatarPlaceholder: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  applicationInfo: {
-    flex: 1,
-  },
-  applicantName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  jobTitle: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 6,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 16,
-  },
+  container:  { ...G.screen },
+  header:     { paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3] },
+  heading:    { ...Typography.h2, color: Colors.textPrimary },
+  count:      { ...Typography.bodySm, color: Colors.textSecondary, marginTop: Spacing[0.5] },
+  filterWrap: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  filterList: { paddingHorizontal: Space.pagePadding, paddingVertical: Spacing[3], gap: Spacing[2] },
+  list:       { padding: Space.pagePadding, paddingTop: Spacing[3], paddingBottom: Space.listBottom },
+  card:       { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, marginBottom: Space.cardGap, borderWidth: 1, borderColor: Colors.border },
+  cardInner:  { flexDirection: 'row', alignItems: 'center', gap: Spacing[3], padding: Space.cardPadding },
+  info:       { flex: 1, gap: Spacing[0.5] },
+  name:       { ...Typography.h5, color: Colors.textPrimary },
+  jobTitle:   { ...Typography.bodySm, color: Colors.textSecondary },
+  date:       { ...Typography.caption, color: Colors.textMuted },
 });
