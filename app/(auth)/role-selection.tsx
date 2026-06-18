@@ -1,109 +1,138 @@
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-} from 'react-native';
+import { useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { User, Building2, ArrowRight } from 'lucide-react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withSpring, withDelay, withTiming,
+} from 'react-native-reanimated';
+import { User, Building2, ArrowRight, ArrowLeft, CheckCircle } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { Colors, Typography, Spacing, Radius, Palette } from '@/constants/theme';
 
 const { width } = Dimensions.get('window');
 
 type Role = 'job_seeker' | 'employer';
 
+const ROLES = [
+  {
+    role: 'job_seeker' as Role,
+    icon: User,
+    title: 'Job Seeker',
+    subtitle: 'Find your dream job',
+    description: 'Browse thousands of jobs, get matched automatically, and track your applications.',
+    features: ['Browse thousands of jobs', 'AI-powered job matching', 'Track your applications'],
+    gradient: ['#1D4ED8', '#2563EB', '#3B82F6'] as [string, string, string],
+    cta: 'Create Seeker Account',
+  },
+  {
+    role: 'employer' as Role,
+    icon: Building2,
+    title: 'Employer',
+    subtitle: 'Hire the best talent',
+    description: 'Post jobs, review candidates, and build your team with ease.',
+    features: ['Post unlimited jobs', 'Smart candidate matching', 'Manage applications'],
+    gradient: ['#065F46', '#047857', '#059669'] as [string, string, string],
+    cta: 'Register Company',
+  },
+];
+
+function RoleCard({ role, icon: Icon, title, subtitle, features, gradient, cta, index, onPress }: any) {
+  const opacity = useSharedValue(0);
+  const scale   = useSharedValue(0.93);
+  const translateY = useSharedValue(30);
+
+  useEffect(() => {
+    const delay = index * 180;
+    opacity.value    = withDelay(delay, withTiming(1, { duration: 500 }));
+    scale.value      = withDelay(delay, withSpring(1, { damping: 16 }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 18 }));
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }, { translateY: translateY.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.cardWrap, style]}>
+      <TouchableOpacity
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onPress(role); }}
+        activeOpacity={0.88}
+      >
+        <LinearGradient
+          colors={gradient}
+          style={styles.card}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {/* Header */}
+          <View style={styles.cardHeader}>
+            <View style={styles.cardIconWrap}>
+              <Icon color={Palette.white} size={28} strokeWidth={1.8} />
+            </View>
+            <View style={styles.cardTitles}>
+              <Text style={styles.cardTitle}>{title}</Text>
+              <Text style={styles.cardSubtitle}>{subtitle}</Text>
+            </View>
+          </View>
+
+          {/* Features */}
+          <View style={styles.featureList}>
+            {features.map((f: string) => (
+              <View key={f} style={styles.featureItem}>
+                <CheckCircle color="rgba(255,255,255,0.9)" size={14} strokeWidth={2.5} />
+                <Text style={styles.featureText}>{f}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* CTA */}
+          <View style={styles.cardCta}>
+            <Text style={styles.cardCtaText}>{cta}</Text>
+            <View style={styles.cardCtaArrow}>
+              <ArrowRight color={gradient[0]} size={18} strokeWidth={2.5} />
+            </View>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 export default function RoleSelectionScreen() {
   const router = useRouter();
 
   const handleRoleSelect = (role: Role) => {
-    router.push({
-      pathname: '/(auth)/register',
-      params: { role },
-    });
+    router.push({ pathname: '/(auth)/register', params: { role } });
   };
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Choose Your Path</Text>
-        <Text style={styles.subtitle}>
-          Select how you want to use JobLink Africa
-        </Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <ArrowLeft color={Colors.textPrimary} size={22} strokeWidth={2} />
+        </TouchableOpacity>
+        <View style={styles.headerText}>
+          <Text style={styles.heading}>Choose Your Path</Text>
+          <Text style={styles.subheading}>How would you like to use JobLink Africa?</Text>
+        </View>
       </View>
 
-      <View style={styles.rolesContainer}>
-        {/* Job Seeker Card */}
-        <TouchableOpacity
-          style={styles.roleCard}
-          onPress={() => handleRoleSelect('job_seeker')}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#2563EB', '#3B82F6']}
-            style={styles.roleCardGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.roleIconContainer}>
-              <User color="#FFFFFF" size={32} />
-            </View>
-            <View style={styles.roleCardContent}>
-              <Text style={styles.roleTitle}>Job Seeker</Text>
-              <Text style={styles.roleDescription}>
-                Find your dream job, showcase your skills, and connect with employers
-              </Text>
-              <View style={styles.roleFeatures}>
-                <Text style={styles.roleFeatureItem}>Browse thousands of jobs</Text>
-                <Text style={styles.roleFeatureItem}>Get matched automatically</Text>
-                <Text style={styles.roleFeatureItem}>Track your applications</Text>
-              </View>
-            </View>
-            <View style={styles.roleCardFooter}>
-              <Text style={styles.roleSelectText}>Create Account</Text>
-              <ArrowRight color="#FFFFFF" size={20} />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Employer Card */}
-        <TouchableOpacity
-          style={styles.roleCard}
-          onPress={() => handleRoleSelect('employer')}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#059669', '#10B981']}
-            style={styles.roleCardGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.roleIconContainer}>
-              <Building2 color="#FFFFFF" size={32} />
-            </View>
-            <View style={styles.roleCardContent}>
-              <Text style={styles.roleTitle}>Employer</Text>
-              <Text style={styles.roleDescription}>
-                Post jobs, find qualified candidates, and build your team
-              </Text>
-              <View style={styles.roleFeatures}>
-                <Text style={styles.roleFeatureItem}>Post unlimited jobs</Text>
-                <Text style={styles.roleFeatureItem}>Review applications</Text>
-                <Text style={styles.roleFeatureItem}>Access talent matches</Text>
-              </View>
-            </View>
-            <View style={styles.roleCardFooter}>
-              <Text style={styles.roleSelectText}>Register Company</Text>
-              <ArrowRight color="#FFFFFF" size={20} />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
+      {/* Role cards */}
+      <View style={styles.cards}>
+        {ROLES.map((r, i) => (
+          <RoleCard key={r.role} {...r} index={i} onPress={handleRoleSelect} />
+        ))}
       </View>
 
+      {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>Already have an account?</Text>
-        <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+        <TouchableOpacity onPress={() => router.push('/(auth)/login')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.footerLink}>Sign In</Text>
         </TouchableOpacity>
       </View>
@@ -112,98 +141,69 @@ export default function RoleSelectionScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 24,
-  },
+  container: { flex: 1, backgroundColor: Colors.bg },
+
   header: {
-    marginTop: 20,
-    marginBottom: 32,
+    paddingHorizontal: Spacing[5],
+    paddingTop: Spacing[3],
+    paddingBottom: Spacing[5],
+    gap: Spacing[4],
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 8,
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    alignSelf: 'flex-start',
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#64748B',
-    lineHeight: 24,
-  },
-  rolesContainer: {
+  headerText: { gap: 4 },
+  heading:    { ...Typography.h1, color: Colors.textPrimary },
+  subheading: { ...Typography.bodyLg, color: Colors.textSecondary, lineHeight: 24 },
+
+  cards: {
     flex: 1,
-    gap: 16,
+    paddingHorizontal: Spacing[5],
+    gap: Spacing[4],
   },
-  roleCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 8,
-    boxShadow: '0px 4px 12px rgba(0,0,0,0.15)',
+  cardWrap: { borderRadius: Radius.xl, overflow: 'hidden' },
+  card:     { padding: Spacing[6], borderRadius: Radius.xl, gap: Spacing[5] },
+
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing[4] },
+  cardIconWrap: {
+    width: 60, height: 60, borderRadius: Radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  roleCardGradient: {
-    padding: 24,
-  },
-  roleIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  roleCardContent: {
-    marginBottom: 16,
-  },
-  roleTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  roleDescription: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  roleFeatures: {
-    gap: 6,
-  },
-  roleFeatureItem: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.85)',
-    paddingLeft: 8,
-  },
-  roleCardFooter: {
+  cardTitles: { flex: 1 },
+  cardTitle:    { fontSize: 24, fontWeight: '700', color: Palette.white, marginBottom: 2 },
+  cardSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
+
+  featureList: { gap: Spacing[2.5] },
+  featureItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing[2.5] },
+  featureText: { fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: '500', flex: 1 },
+
+  cardCta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 16,
+    paddingTop: Spacing[4],
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
   },
-  roleSelectText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  cardCtaText:  { fontSize: 15, fontWeight: '700', color: Palette.white },
+  cardCtaArrow: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Palette.white,
+    alignItems: 'center', justifyContent: 'center',
   },
+
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
-    gap: 8,
+    paddingVertical: Spacing[6],
+    gap: Spacing[2],
   },
-  footerText: {
-    fontSize: 15,
-    color: '#64748B',
-  },
-  footerLink: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
+  footerText: { ...Typography.body, color: Colors.textSecondary },
+  footerLink: { ...Typography.body, fontWeight: '600', color: Colors.primary },
 });

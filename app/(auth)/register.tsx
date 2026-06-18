@@ -1,246 +1,197 @@
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity,
+  KeyboardAvoidingView, Platform, ScrollView, Alert, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Eye, EyeOff, Mail, Lock, User, CheckCircle } from 'lucide-react-native';
+import { Mail, Lock, User, ArrowLeft, Building2, CheckCircle } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Colors, Typography, Spacing, Radius, Palette } from '@/constants/theme';
 
-const registerSchema = z.object({
-  fullName: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Please enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+const schema = z.object({
+  fullName:        z.string().min(2, 'Name must be at least 2 characters'),
+  email:           z.string().email('Enter a valid email'),
+  password:        z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
+}).refine((d) => d.password === d.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
 });
+type Form = z.infer<typeof schema>;
 
-type RegisterFormData = z.infer<typeof registerSchema>;
+const PASSWORD_RULES = [
+  { test: (p: string) => p.length >= 8,           label: 'At least 8 characters' },
+  { test: (p: string) => /[A-Z]/.test(p),         label: 'One uppercase letter' },
+  { test: (p: string) => /[0-9]/.test(p),         label: 'One number' },
+];
 
 export default function RegisterScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ role: 'job_seeker' | 'employer' }>();
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const { signUp, isLoading } = useAuthStore();
-
   const role = params.role || 'job_seeker';
   const isEmployer = role === 'employer';
+  const [submitting, setSubmitting] = useState(false);
+  const [watchedPw, setWatchedPw] = useState('');
+  const { signUp } = useAuthStore();
 
-  const { control, handleSubmit, formState: { errors } } = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: {
-      fullName: '',
-      email: '',
-      password: '',
-      confirmPassword: '',
-    },
+  const { control, handleSubmit, formState: { errors } } = useForm<Form>({
+    resolver: zodResolver(schema),
+    defaultValues: { fullName: '', email: '', password: '', confirmPassword: '' },
   });
 
-  const onSubmit = async (data: RegisterFormData) => {
+  const onSubmit = async (data: Form) => {
+    setSubmitting(true);
     const { error } = await signUp(data.email, data.password, role);
-
+    setSubmitting(false);
     if (error) {
-      Alert.alert('Registration Failed', error.message || 'An error occurred. Please try again.');
+      Alert.alert('Registration Failed', error.message || 'Please try again.');
       return;
     }
-
-    // Redirect based on role — auth guard in each layout also protects these routes
-    if (isEmployer) {
-      router.replace('/(employer)');
-    } else {
-      router.replace('/(job-seeker)');
-    }
+    router.replace(isEmployer ? '/(employer)' : '/(job-seeker)');
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <ArrowLeft color="#1E293B" size={24} />
-            </TouchableOpacity>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>
+      <StatusBar barStyle="dark-content" />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+          {/* Back */}
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <ArrowLeft color={Colors.textPrimary} size={22} strokeWidth={2} />
+          </TouchableOpacity>
+
+          {/* Role badge */}
+          <View style={styles.rolePill}>
+            <View style={[styles.roleIcon, { backgroundColor: isEmployer ? Colors.employerLight : Colors.primaryLight }]}>
               {isEmployer
-                ? 'Register your company and start hiring'
-                : 'Join thousands of job seekers finding opportunities'}
+                ? <Building2 color={Colors.employer} size={16} strokeWidth={2} />
+                : <User color={Colors.primary} size={16} strokeWidth={2} />}
+            </View>
+            <Text style={[styles.roleLabel, { color: isEmployer ? Colors.employer : Colors.primary }]}>
+              {isEmployer ? 'Employer Account' : 'Job Seeker Account'}
             </Text>
           </View>
 
-          {/* Role Badge */}
-          <View style={[styles.roleBadge, isEmployer ? styles.roleBadgeEmployer : styles.roleBadgeSeeker]}>
-            <Text style={styles.roleBadgeText}>
-              {isEmployer ? 'Employer Account' : 'Job Seeker Account'}
+          {/* Heading */}
+          <View style={styles.headingBlock}>
+            <Text style={styles.heading}>Create Account</Text>
+            <Text style={styles.subheading}>
+              {isEmployer
+                ? 'Register your company and start hiring top talent'
+                : 'Join thousands finding their dream jobs in Africa'}
             </Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
-            {/* Full Name */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name</Text>
-              <Controller
-                control={control}
-                name="fullName"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputContainer, errors.fullName && styles.inputError]}>
-                    <User color="#94A3B8" size={20} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter your full name"
-                      placeholderTextColor="#94A3B8"
-                      value={value}
-                      onChangeText={onChange}
-                      autoCapitalize="words"
-                    />
-                  </View>
-                )}
-              />
-              {errors.fullName && (
-                <Text style={styles.errorText}>{errors.fullName.message}</Text>
+            <Controller
+              control={control}
+              name="fullName"
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  label="Full Name"
+                  placeholder={isEmployer ? 'Company representative name' : 'Your full name'}
+                  value={value}
+                  onChangeText={onChange}
+                  autoCapitalize="words"
+                  autoComplete="name"
+                  leftIcon={<User color={Colors.textMuted} size={18} strokeWidth={2} />}
+                  error={errors.fullName?.message}
+                  required
+                />
               )}
-            </View>
+            />
 
-            {/* Email */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <Controller
-                control={control}
-                name="email"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputContainer, errors.email && styles.inputError]}>
-                    <Mail color="#94A3B8" size={20} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter your email"
-                      placeholderTextColor="#94A3B8"
-                      value={value}
-                      onChangeText={onChange}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                    />
-                  </View>
-                )}
-              />
-              {errors.email && (
-                <Text style={styles.errorText}>{errors.email.message}</Text>
+            <Controller
+              control={control}
+              name="email"
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  label="Email Address"
+                  placeholder={isEmployer ? 'company@example.com' : 'you@example.com'}
+                  value={value}
+                  onChangeText={onChange}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  leftIcon={<Mail color={Colors.textMuted} size={18} strokeWidth={2} />}
+                  error={errors.email?.message}
+                  required
+                />
               )}
-            </View>
+            />
 
-            {/* Password */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <Controller
-                control={control}
-                name="password"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputContainer, errors.password && styles.inputError]}>
-                    <Lock color="#94A3B8" size={20} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Create a password"
-                      placeholderTextColor="#94A3B8"
-                      value={value}
-                      onChangeText={onChange}
-                      secureTextEntry={!showPassword}
-                      autoCapitalize="none"
-                    />
-                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                      {showPassword ? (
-                        <EyeOff color="#94A3B8" size={20} />
-                      ) : (
-                        <Eye color="#94A3B8" size={20} />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              />
-              {errors.password && (
-                <Text style={styles.errorText}>{errors.password.message}</Text>
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  label="Password"
+                  placeholder="Create a strong password"
+                  value={value}
+                  onChangeText={(v) => { onChange(v); setWatchedPw(v); }}
+                  autoCapitalize="none"
+                  autoComplete="new-password"
+                  isPassword
+                  leftIcon={<Lock color={Colors.textMuted} size={18} strokeWidth={2} />}
+                  error={errors.password?.message}
+                  required
+                />
               )}
-            </View>
+            />
 
-            {/* Confirm Password */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <Controller
-                control={control}
-                name="confirmPassword"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputContainer, errors.confirmPassword && styles.inputError]}>
-                    <Lock color="#94A3B8" size={20} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Confirm your password"
-                      placeholderTextColor="#94A3B8"
-                      value={value}
-                      onChangeText={onChange}
-                      secureTextEntry={!showConfirmPassword}
-                      autoCapitalize="none"
-                    />
-                    <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                      {showConfirmPassword ? (
-                        <EyeOff color="#94A3B8" size={20} />
-                      ) : (
-                        <Eye color="#94A3B8" size={20} />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              />
-              {errors.confirmPassword && (
-                <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>
-              )}
-            </View>
-
-            {/* Password Requirements */}
-            <View style={styles.requirements}>
-              <Text style={styles.requirementsTitle}>Password must have:</Text>
-              <View style={styles.requirementItem}>
-                <CheckCircle color="#10B981" size={16} />
-                <Text style={styles.requirementText}>At least 8 characters</Text>
+            {/* Password strength */}
+            {watchedPw.length > 0 && (
+              <View style={styles.pwRules}>
+                {PASSWORD_RULES.map((r) => {
+                  const ok = r.test(watchedPw);
+                  return (
+                    <View key={r.label} style={styles.pwRule}>
+                      <CheckCircle
+                        color={ok ? Colors.success : Colors.textMuted}
+                        size={14}
+                        strokeWidth={2.5}
+                      />
+                      <Text style={[styles.pwRuleText, ok && styles.pwRuleOk]}>{r.label}</Text>
+                    </View>
+                  );
+                })}
               </View>
-            </View>
+            )}
 
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.submitButton, isEmployer ? styles.submitButtonEmployer : null]}
-              onPress={handleSubmit(onSubmit)}
-              disabled={isLoading}
-              activeOpacity={0.8}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>Create Account</Text>
+            <Controller
+              control={control}
+              name="confirmPassword"
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  label="Confirm Password"
+                  placeholder="Repeat your password"
+                  value={value}
+                  onChangeText={onChange}
+                  autoCapitalize="none"
+                  isPassword
+                  leftIcon={<Lock color={Colors.textMuted} size={18} strokeWidth={2} />}
+                  error={errors.confirmPassword?.message}
+                  required
+                />
               )}
-            </TouchableOpacity>
+            />
+
+            <Button
+              onPress={handleSubmit(onSubmit)}
+              label={isEmployer ? 'Create Company Account' : 'Create Account'}
+              loading={submitting}
+              variant={isEmployer ? 'employer' : 'primary'}
+              size="lg"
+            />
           </View>
 
           {/* Footer */}
@@ -250,6 +201,12 @@ export default function RegisterScreen() {
               <Text style={styles.footerLink}>Sign In</Text>
             </TouchableOpacity>
           </View>
+
+          <Text style={styles.terms}>
+            By creating an account you agree to our{' '}
+            <Text style={styles.termsLink}>Terms</Text> &{' '}
+            <Text style={styles.termsLink}>Privacy Policy</Text>
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -257,139 +214,62 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-  },
-  header: {
-    marginTop: 12,
-    marginBottom: 24,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#64748B',
-    lineHeight: 22,
-  },
-  roleBadge: {
+  container: { flex: 1, backgroundColor: Colors.bgCard },
+  kav:       { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing[6], paddingBottom: Spacing[8] },
+
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: Colors.bg,
+    borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
     alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 24,
+    marginTop: Spacing[4],
+    marginBottom: Spacing[5],
   },
-  roleBadgeSeeker: {
-    backgroundColor: '#EFF6FF',
-  },
-  roleBadgeEmployer: {
-    backgroundColor: '#ECFDF5',
-  },
-  roleBadgeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
-  form: {
-    gap: 20,
-  },
-  inputGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#1E293B',
-  },
-  inputContainer: {
+
+  rolePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    backgroundColor: '#F8FAFC',
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.bg,
+    borderWidth: 1, borderColor: Colors.border,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[1.5],
+    gap: Spacing[2],
+    marginBottom: Spacing[5],
   },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1E293B',
-  },
-  errorText: {
-    fontSize: 13,
-    color: '#EF4444',
-    marginTop: 4,
-  },
-  requirements: {
-    gap: 8,
-  },
-  requirementsTitle: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  requirementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  requirementText: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  submitButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitButtonEmployer: {
-    backgroundColor: '#059669',
-  },
-  submitButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  roleIcon: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  roleLabel: { ...Typography.label, fontWeight: '600' },
+
+  headingBlock: { marginBottom: Spacing[7], gap: Spacing[1.5] },
+  heading:      { ...Typography.h1, color: Colors.textPrimary },
+  subheading:   { ...Typography.body, color: Colors.textSecondary, lineHeight: 22 },
+
+  form: { gap: Spacing[5] },
+
+  pwRules: { gap: Spacing[2], marginTop: -Spacing[2] },
+  pwRule:  { flexDirection: 'row', alignItems: 'center', gap: Spacing[2] },
+  pwRuleText: { ...Typography.label, color: Colors.textMuted },
+  pwRuleOk:   { color: Colors.success },
+
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 32,
-    gap: 8,
+    marginTop: Spacing[7],
+    marginBottom: Spacing[4],
+    gap: Spacing[2],
   },
-  footerText: {
-    fontSize: 15,
-    color: '#64748B',
+  footerText: { ...Typography.body, color: Colors.textSecondary },
+  footerLink: { ...Typography.body, fontWeight: '700', color: Colors.primary },
+
+  terms: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
   },
-  footerLink: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
+  termsLink: { color: Colors.primary, fontWeight: '600' },
 });

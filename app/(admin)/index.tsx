@@ -1,408 +1,270 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Users,
-  Building2,
-  Briefcase,
-  FileCheck,
-  TrendingUp,
-  Clock,
-  AlertCircle,
-  CheckCircle,
-  ArrowRight,
-  LogOut,
+  Users, Building2, Briefcase, FileCheck, AlertTriangle,
+  ArrowRight, TrendingUp, Shield, LogOut,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useSignOut } from '@/hooks/useSignOut';
+import { StatCard } from '@/components/ui/StatCard';
+import { Colors, Typography, Spacing, Radius, Palette, Space } from '@/constants/theme';
 
-interface DashboardStats {
-  totalUsers: number;
-  totalEmployers: number;
-  totalJobs: number;
-  totalApplications: number;
-  pendingVerifications: number;
-  newUsersToday: number;
+interface Stats {
+  users: number;
+  employers: number;
   activeJobs: number;
+  applications: number;
+  pendingVerifications: number;
 }
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { handleSignOut } = useSignOut();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState<DashboardStats>({
-    totalUsers: 0,
-    totalEmployers: 0,
-    totalJobs: 0,
-    totalApplications: 0,
-    pendingVerifications: 0,
-    newUsersToday: 0,
-    activeJobs: 0,
-  });
 
-  useEffect(() => {
-    fetchStats();
+  const [stats,      setStats]      = useState<Stats>({ users: 0, employers: 0, activeJobs: 0, applications: 0, pendingVerifications: 0 });
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const [u, e, j, a, pv] = await Promise.all([
+        supabase.from('users').select('id', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('employers').select('id', { count: 'exact', head: true }),
+        supabase.from('jobs').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('applications').select('id', { count: 'exact', head: true }),
+        supabase.from('employers').select('id', { count: 'exact', head: true }).eq('verification_status', 'pending'),
+      ]);
+      setStats({
+        users:                u.count  ?? 0,
+        employers:            e.count  ?? 0,
+        activeJobs:           j.count  ?? 0,
+        applications:         a.count  ?? 0,
+        pendingVerifications: pv.count ?? 0,
+      });
+    } catch (err) {
+      console.error('Admin stats error:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const fetchStats = async () => {
-    setLoading(true);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+  const onRefresh = async () => { setRefreshing(true); await fetchStats(); setRefreshing(false); };
 
-    const [usersCount, employersCount, jobsCount, appsCount, pendingCount, activeJobsCount] = await Promise.all([
-      supabase.from('users').select('id', { count: 'exact', head: true }).eq('is_active', true),
-      supabase.from('employers').select('id', { count: 'exact', head: true }),
-      supabase.from('jobs').select('id', { count: 'exact', head: true }),
-      supabase.from('applications').select('id', { count: 'exact', head: true }),
-      supabase.from('employers').select('id', { count: 'exact', head: true }).eq('verification_status', 'pending'),
-      supabase.from('jobs').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-    ]);
+  const STAT_CARDS = [
+    { label: 'Active Users',    value: stats.users,        icon: <Users color={Colors.primary} size={22} strokeWidth={2} />,    color: Colors.primary,  bg: Colors.primaryLight },
+    { label: 'Employers',       value: stats.employers,    icon: <Building2 color={Colors.employer} size={22} strokeWidth={2} />, color: Colors.employer, bg: Colors.employerLight },
+    { label: 'Active Jobs',     value: stats.activeJobs,   icon: <Briefcase color="#D97706" size={22} strokeWidth={2} />,        color: '#D97706',       bg: '#FEF3C7' },
+    { label: 'Applications',    value: stats.applications, icon: <FileCheck color={Colors.admin} size={22} strokeWidth={2} />,   color: Colors.admin,    bg: Colors.adminLight },
+  ];
 
-    setStats({
-      totalUsers: usersCount.count || 0,
-      totalEmployers: employersCount.count || 0,
-      totalJobs: jobsCount.count || 0,
-      totalApplications: appsCount.count || 0,
-      pendingVerifications: pendingCount.count || 0,
-      newUsersToday: 0,
-      activeJobs: activeJobsCount.count || 0,
-    });
-
-    setLoading(false);
-    setRefreshing(false);
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchStats();
-  };
+  const QUICK_LINKS = [
+    { label: 'Manage Users',         desc: 'View & moderate job seekers',    icon: Users,      color: Colors.primary,  path: '/(admin)/users' },
+    { label: 'Employer Verification',desc: 'Review company registrations',    icon: Building2,  color: Colors.employer, path: '/(admin)/employers' },
+    { label: 'Platform Jobs',         desc: 'Monitor all job listings',       icon: Briefcase,  color: '#D97706',       path: '/(admin)/jobs' },
+    { label: 'Applications',          desc: 'Platform-wide applications',     icon: FileCheck,  color: Colors.admin,    path: '/(admin)/applications' },
+  ];
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#8B5CF6']} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.admin} />}
       >
-        {/* Header */}
+        {/* ── Header ──────────────────────────────────────────── */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Admin Dashboard</Text>
-            <Text style={styles.headerSubtitle}>{user?.email || 'Platform Overview'}</Text>
+          <View style={styles.headerLeft}>
+            <View style={styles.adminBadge}>
+              <Shield color={Colors.admin} size={14} strokeWidth={2.5} />
+              <Text style={styles.adminBadgeText}>Admin</Text>
+            </View>
+            <Text style={styles.headerTitle}>Control Panel</Text>
+            <Text style={styles.headerEmail}>{user?.email}</Text>
           </View>
           <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-            <LogOut color="#EF4444" size={20} />
+            <LogOut color={Colors.error} size={20} strokeWidth={2} />
           </TouchableOpacity>
         </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { backgroundColor: '#EFF6FF' }]}>
-            <Users color="#2563EB" size={24} />
-            <Text style={styles.statValue}>{stats.totalUsers}</Text>
-            <Text style={styles.statLabel}>Total Users</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#ECFDF5' }]}>
-            <Building2 color="#059669" size={24} />
-            <Text style={styles.statValue}>{stats.totalEmployers}</Text>
-            <Text style={styles.statLabel}>Employers</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#FEF3C7' }]}>
-            <Briefcase color="#D97706" size={24} />
-            <Text style={styles.statValue}>{stats.activeJobs}</Text>
-            <Text style={styles.statLabel}>Active Jobs</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#FCE7F3' }]}>
-            <FileCheck color="#DB2777" size={24} />
-            <Text style={styles.statValue}>{stats.totalApplications}</Text>
-            <Text style={styles.statLabel}>Applications</Text>
-          </View>
-        </View>
-
-        {/* Pending Verifications Alert */}
+        {/* ── Pending Verification Alert ───────────────────────── */}
         {stats.pendingVerifications > 0 && (
-          <TouchableOpacity onPress={() => router.push('/(admin)/employers')}>
+          <TouchableOpacity
+            style={styles.alertCard}
+            onPress={() => router.push('/(admin)/employers')}
+            activeOpacity={0.85}
+          >
             <LinearGradient
-              colors={['#F59E0B', '#D97706']}
-              style={styles.alertCard}
+              colors={['#D97706', '#F59E0B']}
+              style={styles.alertGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
-              <View style={styles.alertContent}>
-                <AlertCircle color="#FFFFFF" size={24} />
-                <View style={styles.alertText}>
-                  <Text style={styles.alertTitle}>Pending Verifications</Text>
-                  <Text style={styles.alertDesc}>
-                    {stats.pendingVerifications} employer{stats.pendingVerifications !== 1 ? 's' : ''} awaiting verification
-                  </Text>
-                </View>
+              <View style={styles.alertIcon}>
+                <AlertTriangle color={Palette.white} size={20} strokeWidth={2.5} />
               </View>
-              <ArrowRight color="#FFFFFF" size={20} />
+              <View style={styles.alertText}>
+                <Text style={styles.alertTitle}>Action Required</Text>
+                <Text style={styles.alertDesc}>
+                  {stats.pendingVerifications} employer{stats.pendingVerifications !== 1 ? 's' : ''} awaiting verification
+                </Text>
+              </View>
+              <ArrowRight color={Palette.white} size={20} strokeWidth={2} />
             </LinearGradient>
           </TouchableOpacity>
         )}
 
-        {/* Quick Actions */}
+        {/* ── Stats Grid ───────────────────────────────────────── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionsGrid}>
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push('/(admin)/users')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#EFF6FF' }]}>
-                <Users color="#2563EB" size={24} />
+          <Text style={styles.sectionTitle}>Platform Overview</Text>
+          <View style={styles.statsGrid}>
+            {STAT_CARDS.map(s => (
+              <View key={s.label} style={styles.statWrap}>
+                <StatCard
+                  label={s.label}
+                  value={loading ? '—' : s.value.toLocaleString()}
+                  icon={s.icon}
+                  color={s.color}
+                  bg={s.bg}
+                />
               </View>
-              <Text style={styles.actionTitle}>Manage Users</Text>
-              <Text style={styles.actionDesc}>View and manage job seekers</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push('/(admin)/employers')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#ECFDF5' }]}>
-                <Building2 color="#059669" size={24} />
-              </View>
-              <Text style={styles.actionTitle}>Employer Verification</Text>
-              <Text style={styles.actionDesc}>Review and verify companies</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push('/(admin)/jobs')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#FEF3C7' }]}>
-                <Briefcase color="#D97706" size={24} />
-              </View>
-              <Text style={styles.actionTitle}>Manage Jobs</Text>
-              <Text style={styles.actionDesc}>Review posted jobs</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push('/(admin)/applications')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#FCE7F3' }]}>
-                <FileCheck color="#DB2777" size={24} />
-              </View>
-              <Text style={styles.actionTitle}>Applications</Text>
-              <Text style={styles.actionDesc}>View all applications</Text>
-            </TouchableOpacity>
+            ))}
           </View>
         </View>
 
-        {/* Platform Stats */}
+        {/* ── Quick Links ──────────────────────────────────────── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Platform Statistics</Text>
-          <View style={styles.chartPlaceholder}>
-            <TrendingUp color="#8B5CF6" size={32} />
-            <Text style={styles.chartPlaceholderTitle}>Analytics Dashboard</Text>
-            <Text style={styles.chartPlaceholderDesc}>
-              Detailed analytics coming soon. Track user growth, job postings, and application trends.
+          <Text style={styles.sectionTitle}>Manage Platform</Text>
+          <View style={styles.linkList}>
+            {QUICK_LINKS.map(({ label, desc, icon: Icon, color, path }) => (
+              <TouchableOpacity
+                key={label}
+                style={styles.linkCard}
+                onPress={() => router.push(path as any)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.linkIcon, { backgroundColor: color + '18' }]}>
+                  <Icon color={color} size={22} strokeWidth={2} />
+                </View>
+                <View style={styles.linkText}>
+                  <Text style={styles.linkTitle}>{label}</Text>
+                  <Text style={styles.linkDesc}>{desc}</Text>
+                </View>
+                <ArrowRight color={Colors.textMuted} size={18} strokeWidth={2} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── Analytics placeholder ─────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Analytics</Text>
+          <View style={styles.analyticsCard}>
+            <TrendingUp color={Colors.admin} size={36} strokeWidth={1.5} />
+            <Text style={styles.analyticsTitle}>Detailed Analytics</Text>
+            <Text style={styles.analyticsDesc}>
+              Advanced charts and reporting coming in the next release.
             </Text>
           </View>
         </View>
 
-        {/* Recent Activity */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <View style={styles.activityCard}>
-            <View style={styles.activityItem}>
-              <View style={[styles.activityDot, { backgroundColor: '#10B981' }]} />
-              <Text style={styles.activityText}>Platform initialized</Text>
-              <Text style={styles.activityTime}>Just now</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.bottomPadding} />
+        <View style={{ height: Space.tabBarHeight + 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
+  container: { flex: 1, backgroundColor: Colors.bg },
+
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    paddingHorizontal: Space.pagePadding,
+    paddingTop: Spacing[5],
+    paddingBottom: Spacing[4],
   },
-  signOutBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FEE2E2',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    gap: 12,
-  },
-  statCard: {
-    width: '48%',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginTop: 8,
-  },
-  statLabel: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  alertCard: {
-    margin: 20,
-    padding: 16,
-    borderRadius: 16,
+  headerLeft: { gap: 4 },
+  adminBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  alertContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  alertText: {
-    flex: 1,
-  },
-  alertTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.adminLight,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing[2.5],
+    paddingVertical: Spacing[0.5],
+    gap: 4,
     marginBottom: 2,
   },
-  alertDesc: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.9)',
+  adminBadgeText: { ...Typography.caption, color: Colors.admin, fontWeight: '700' },
+  headerTitle:    { ...Typography.h2, color: Colors.textPrimary },
+  headerEmail:    { ...Typography.bodySm, color: Colors.textSecondary },
+  signOutBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: Colors.errorLight,
+    alignItems: 'center', justifyContent: 'center',
   },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 24,
+
+  alertCard: {
+    marginHorizontal: Space.pagePadding,
+    marginBottom: Spacing[5],
+    borderRadius: Radius.xl,
+    overflow: 'hidden',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 12,
-  },
-  actionsGrid: {
+  alertGradient: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    alignItems: 'center',
+    padding: Spacing[4],
+    gap: Spacing[3],
   },
-  actionCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  alertIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  actionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  alertText:  { flex: 1 },
+  alertTitle: { ...Typography.h5, color: Palette.white },
+  alertDesc:  { ...Typography.bodySm, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+
+  section:      { paddingHorizontal: Space.pagePadding, marginBottom: Spacing[6] },
+  sectionTitle: { ...Typography.h4, color: Colors.textPrimary, marginBottom: Spacing[4] },
+
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing[3] },
+  statWrap:  { width: '47.5%' },
+
+  linkList: { gap: Spacing[3] },
+  linkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.lg,
+    padding: Spacing[4],
+    borderWidth: 1, borderColor: Colors.border,
+    gap: Spacing[3],
+  },
+  linkIcon: { width: 44, height: 44, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  linkText: { flex: 1 },
+  linkTitle:{ ...Typography.h5, color: Colors.textPrimary, marginBottom: 2 },
+  linkDesc: { ...Typography.bodySm, color: Colors.textSecondary },
+
+  analyticsCard: {
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  actionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  actionDesc: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  chartPlaceholder: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.xl,
+    padding: Spacing[8],
+    borderWidth: 1.5,
+    borderColor: Colors.border,
     borderStyle: 'dashed',
+    gap: Spacing[3],
   },
-  chartPlaceholderTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  chartPlaceholderDesc: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  activityCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  activityDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  activityText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#1E293B',
-  },
-  activityTime: {
-    fontSize: 12,
-    color: '#94A3B8',
-  },
-  bottomPadding: {
-    height: 100,
-  },
+  analyticsTitle: { ...Typography.h4, color: Colors.textPrimary },
+  analyticsDesc:  { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22 },
 });
