@@ -34,11 +34,11 @@ export default function WelcomeScreen() {
 
     // Sequence: logo → features (staggered) → buttons
     Animated.sequence([
-      Animated.timing(logoAnim, { toValue: 1, duration: 550, useNativeDriver: true }),
+      Animated.timing(logoAnim, { toValue: 1, duration: 550, useNativeDriver: false }),
       Animated.stagger(140, featureAnim.map(a =>
-        Animated.timing(a, { toValue: 1, duration: 420, useNativeDriver: true })
+        Animated.timing(a, { toValue: 1, duration: 420, useNativeDriver: false })
       )),
-      Animated.timing(btnAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
+      Animated.timing(btnAnim, { toValue: 1, duration: 350, useNativeDriver: false }),
     ]).start();
   }, [isAuthenticated, user]);
 

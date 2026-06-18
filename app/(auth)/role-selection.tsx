@@ -43,7 +43,7 @@ function RoleCard({ role, icon: Icon, title, subtitle, features, gradient, cta, 
       toValue: 1,
       duration: 480,
       delay: index * 180,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, []);
 
