@@ -1,85 +1,52 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar,
+  View, Text, StyleSheet, TouchableOpacity,
+  Dimensions, Animated, StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, withDelay, withSpring, Easing,
-} from 'react-native-reanimated';
 import { Briefcase, Users, Building2, MapPin, ChevronRight } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { Colors, Typography, Spacing, Radius, Palette } from '@/constants/theme';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 const FEATURES = [
-  { icon: Users,     title: 'Find Talent',      desc: 'Connect with skilled workers' },
-  { icon: Building2, title: 'Top Employers',     desc: 'Discover verified companies' },
-  { icon: MapPin,    title: 'Location-Based',    desc: 'Find jobs near you' },
+  { icon: Users,     title: 'Find Talent',    desc: 'Connect with skilled workers' },
+  { icon: Building2, title: 'Top Employers',  desc: 'Discover verified companies' },
+  { icon: MapPin,    title: 'Near You',        desc: 'Find jobs based on location' },
 ];
-
-function FeatureRow({ icon: Icon, title, desc, delay }: any) {
-  const opacity = useSharedValue(0);
-  const translateX = useSharedValue(-24);
-
-  useEffect(() => {
-    opacity.value    = withDelay(delay, withTiming(1, { duration: 500 }));
-    translateX.value = withDelay(delay, withSpring(0, { damping: 18 }));
-  }, []);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateX: translateX.value }],
-  }));
-
-  return (
-    <Animated.View style={[styles.featureRow, style]}>
-      <View style={styles.featureIcon}>
-        <Icon color={Colors.primary} size={20} strokeWidth={2} />
-      </View>
-      <View style={styles.featureText}>
-        <Text style={styles.featureTitle}>{title}</Text>
-        <Text style={styles.featureDesc}>{desc}</Text>
-      </View>
-    </Animated.View>
-  );
-}
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
 
-  const logoScale   = useSharedValue(0.7);
-  const logoOpacity = useSharedValue(0);
-  const btnOpacity  = useSharedValue(0);
-  const btnY        = useSharedValue(24);
+  // Animations
+  const logoAnim  = useRef(new Animated.Value(0)).current;
+  const featureAnim = useRef(FEATURES.map(() => new Animated.Value(0))).current;
+  const btnAnim   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (isAuthenticated && user) {
       redirectByRole(user.role);
       return;
     }
-    logoScale.value   = withSpring(1, { damping: 14, stiffness: 120 });
-    logoOpacity.value = withTiming(1, { duration: 600 });
-    btnOpacity.value  = withDelay(900, withTiming(1, { duration: 400 }));
-    btnY.value        = withDelay(900, withSpring(0, { damping: 18 }));
+
+    // Sequence: logo → features (staggered) → buttons
+    Animated.sequence([
+      Animated.timing(logoAnim, { toValue: 1, duration: 550, useNativeDriver: true }),
+      Animated.stagger(140, featureAnim.map(a =>
+        Animated.timing(a, { toValue: 1, duration: 420, useNativeDriver: true })
+      )),
+      Animated.timing(btnAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
+    ]).start();
   }, [isAuthenticated, user]);
 
   const redirectByRole = (role: string) => {
-    if (role === 'admin')    router.replace('/(admin)');
+    if (role === 'admin')       router.replace('/(admin)');
     else if (role === 'employer') router.replace('/(employer)');
     else router.replace('/(job-seeker)');
   };
-
-  const logoStyle = useAnimatedStyle(() => ({
-    opacity: logoOpacity.value,
-    transform: [{ scale: logoScale.value }],
-  }));
-  const btnStyle = useAnimatedStyle(() => ({
-    opacity: btnOpacity.value,
-    transform: [{ translateY: btnY.value }],
-  }));
 
   return (
     <View style={styles.container}>
@@ -96,7 +63,17 @@ export default function WelcomeScreen() {
       <View style={[styles.circle, styles.circleMid]} />
 
       {/* Logo */}
-      <Animated.View style={[styles.logoSection, logoStyle]}>
+      <Animated.View
+        style={[
+          styles.logoSection,
+          {
+            opacity: logoAnim,
+            transform: [{
+              scale: logoAnim.interpolate({ inputRange: [0, 1], outputRange: [0.75, 1] }),
+            }],
+          },
+        ]}
+      >
         <View style={styles.logoRing}>
           <View style={styles.logoBg}>
             <Briefcase color={Palette.white} size={32} strokeWidth={2} />
@@ -106,15 +83,46 @@ export default function WelcomeScreen() {
         <Text style={styles.tagline}>Connect. Discover. Succeed.</Text>
       </Animated.View>
 
-      {/* Features */}
+      {/* Feature rows */}
       <View style={styles.features}>
         {FEATURES.map((f, i) => (
-          <FeatureRow key={f.title} {...f} delay={300 + i * 150} />
+          <Animated.View
+            key={f.title}
+            style={[
+              styles.featureRow,
+              {
+                opacity: featureAnim[i],
+                transform: [{
+                  translateX: featureAnim[i].interpolate({
+                    inputRange: [0, 1], outputRange: [-28, 0],
+                  }),
+                }],
+              },
+            ]}
+          >
+            <View style={styles.featureIcon}>
+              <f.icon color={Colors.primary} size={20} strokeWidth={2} />
+            </View>
+            <View style={styles.featureText}>
+              <Text style={styles.featureTitle}>{f.title}</Text>
+              <Text style={styles.featureDesc}>{f.desc}</Text>
+            </View>
+          </Animated.View>
         ))}
       </View>
 
       {/* CTAs */}
-      <Animated.View style={[styles.ctas, btnStyle]}>
+      <Animated.View
+        style={[
+          styles.ctas,
+          {
+            opacity: btnAnim,
+            transform: [{
+              translateY: btnAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
+            }],
+          },
+        ]}
+      >
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={() => router.push('/(auth)/role-selection')}
@@ -139,7 +147,6 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-  // Decorative
   circle: {
     position: 'absolute',
     borderRadius: 9999,
@@ -148,7 +155,6 @@ const styles = StyleSheet.create({
   circleTop: { width: 320, height: 320, top: -100, right: -80 },
   circleMid: { width: 220, height: 220, top: height * 0.3, left: -80 },
 
-  // Logo
   logoSection: {
     alignItems: 'center',
     marginTop: height * 0.1,
@@ -166,25 +172,15 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   appName: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: Palette.white,
-    letterSpacing: -0.5,
-    marginBottom: 6,
+    fontSize: 34, fontWeight: '800',
+    color: Palette.white, letterSpacing: -0.5, marginBottom: 6,
   },
   tagline: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.75)',
-    letterSpacing: 0.3,
+    fontSize: 16, fontWeight: '500',
+    color: 'rgba(255,255,255,0.75)', letterSpacing: 0.3,
   },
 
-  // Features
-  features: {
-    marginTop: 40,
-    paddingHorizontal: 28,
-    gap: 12,
-  },
+  features: { marginTop: 40, paddingHorizontal: 28, gap: 12 },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -200,20 +196,14 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.white,
     alignItems: 'center', justifyContent: 'center',
   },
-  featureText: { flex: 1 },
-  featureTitle: {
-    fontSize: 15, fontWeight: '600', color: Palette.white, marginBottom: 2,
-  },
-  featureDesc: {
-    fontSize: 13, color: 'rgba(255,255,255,0.7)',
-  },
+  featureText:  { flex: 1 },
+  featureTitle: { fontSize: 15, fontWeight: '600', color: Palette.white, marginBottom: 2 },
+  featureDesc:  { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
 
-  // CTAs
   ctas: {
     position: 'absolute',
     bottom: 44,
-    left: 24,
-    right: 24,
+    left: 24, right: 24,
     gap: 12,
   },
   primaryBtn: {
@@ -225,9 +215,7 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     gap: 6,
   },
-  primaryBtnText: {
-    fontSize: 17, fontWeight: '700', color: Colors.primary,
-  },
+  primaryBtnText: { fontSize: 17, fontWeight: '700', color: Colors.primary },
   secondaryBtn: {
     borderRadius: Radius.xl,
     paddingVertical: 16,
@@ -235,7 +223,5 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.4)',
   },
-  secondaryBtnText: {
-    fontSize: 15, fontWeight: '600', color: Palette.white,
-  },
+  secondaryBtnText: { fontSize: 15, fontWeight: '600', color: Palette.white },
 });

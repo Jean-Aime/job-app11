@@ -2,17 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, Image, FlatList, Dimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from 'react-native';import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bell, Search, ChevronRight, MapPin, Briefcase, Clock,
   TrendingUp, Star, Building2, Bookmark, Zap,
 } from 'lucide-react-native';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, withSpring,
-} from 'react-native-reanimated';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { Job, JobCategory } from '@/types/database';
@@ -32,18 +28,8 @@ interface JobWithMatch extends Job {
 
 // ─── Job Card ─────────────────────────────────────────────────────────────────
 function JobCard({ job, onPress, showMatch }: { job: JobWithMatch; onPress: () => void; showMatch?: boolean }) {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
   return (
-    <Animated.View style={style}>
-      <TouchableOpacity
-        style={styles.jobCard}
-        onPress={onPress}
-        onPressIn={() => { scale.value = withSpring(0.97, { damping: 20 }); }}
-        onPressOut={() => { scale.value = withSpring(1, { damping: 20 }); }}
-        activeOpacity={1}
-      >
+    <TouchableOpacity style={styles.jobCard} onPress={onPress} activeOpacity={0.82}>
         <View style={styles.jobCardHeader}>
           <View style={styles.companyLogo}>
             {job.employer?.company_logo_url
@@ -81,8 +67,7 @@ function JobCard({ job, onPress, showMatch }: { job: JobWithMatch; onPress: () =
             <Text style={styles.metaText}>{formatTimeAgo(job.created_at)}</Text>
           </View>
         </View>
-      </TouchableOpacity>
-    </Animated.View>
+    </TouchableOpacity>
   );
 }
 

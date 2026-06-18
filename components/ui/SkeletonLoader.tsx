@@ -1,61 +1,61 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  interpolate,
-  Easing,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Animated, ViewStyle } from 'react-native';
 import { Colors, Radius } from '@/constants/theme';
 
 interface SkeletonProps {
-  width?: number | string;
+  width?: number | `${number}%` | 'auto';
   height?: number;
   borderRadius?: number;
   style?: ViewStyle;
 }
 
-export function Skeleton({ width = '100%', height = 16, borderRadius = Radius.sm, style }: SkeletonProps) {
-  const shimmer = useSharedValue(0);
+export function Skeleton({
+  width = '100%',
+  height = 16,
+  borderRadius = Radius.sm,
+  style,
+}: SkeletonProps) {
+  const pulse = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true
-    );
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1,   duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.5, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
   }, []);
-
-  const animStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(shimmer.value, [0, 1], [0.5, 1]),
-  }));
 
   return (
     <Animated.View
       style={[
-        { width: width as any, height, borderRadius, backgroundColor: Colors.skeleton },
-        animStyle,
+        {
+          width: width as any,
+          height,
+          borderRadius,
+          backgroundColor: Colors.skeleton,
+          opacity: pulse,
+        },
         style,
       ]}
     />
   );
 }
 
-// Preset skeletons for common patterns
+// ─── Preset skeletons ─────────────────────────────────────────────────────────
+
 export function JobCardSkeleton() {
   return (
-    <View style={skStyles.card}>
-      <View style={skStyles.row}>
+    <View style={sk.card}>
+      <View style={sk.row}>
         <Skeleton width={48} height={48} borderRadius={12} />
-        <View style={skStyles.col}>
+        <View style={sk.col}>
           <Skeleton width="60%" height={14} />
           <Skeleton width="40%" height={11} style={{ marginTop: 6 }} />
           <Skeleton width="50%" height={11} style={{ marginTop: 4 }} />
         </View>
       </View>
-      <View style={skStyles.tags}>
+      <View style={sk.tags}>
         <Skeleton width={70} height={26} borderRadius={8} />
         <Skeleton width={80} height={26} borderRadius={8} />
         <Skeleton width={60} height={26} borderRadius={8} />
@@ -66,7 +66,7 @@ export function JobCardSkeleton() {
 
 export function ProfileHeaderSkeleton() {
   return (
-    <View style={[skStyles.card, { alignItems: 'center', paddingVertical: 28 }]}>
+    <View style={[sk.card, { alignItems: 'center', paddingVertical: 28 }]}>
       <Skeleton width={96} height={96} borderRadius={48} />
       <Skeleton width="50%" height={18} style={{ marginTop: 16 }} />
       <Skeleton width="35%" height={13} style={{ marginTop: 8 }} />
@@ -75,7 +75,7 @@ export function ProfileHeaderSkeleton() {
   );
 }
 
-const skStyles = StyleSheet.create({
+const sk = StyleSheet.create({
   card: {
     backgroundColor: Colors.bgCard,
     borderRadius: Radius.lg,

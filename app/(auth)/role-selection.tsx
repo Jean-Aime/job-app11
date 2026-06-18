@@ -1,11 +1,11 @@
-import { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar } from 'react-native';
+import { useEffect, useRef } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity,
+  Dimensions, Animated, StatusBar,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring, withDelay, withTiming,
-} from 'react-native-reanimated';
 import { User, Building2, ArrowRight, ArrowLeft, CheckCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Colors, Typography, Spacing, Radius, Palette } from '@/constants/theme';
@@ -20,7 +20,6 @@ const ROLES = [
     icon: User,
     title: 'Job Seeker',
     subtitle: 'Find your dream job',
-    description: 'Browse thousands of jobs, get matched automatically, and track your applications.',
     features: ['Browse thousands of jobs', 'AI-powered job matching', 'Track your applications'],
     gradient: ['#1D4ED8', '#2563EB', '#3B82F6'] as [string, string, string],
     cta: 'Create Seeker Account',
@@ -30,7 +29,6 @@ const ROLES = [
     icon: Building2,
     title: 'Employer',
     subtitle: 'Hire the best talent',
-    description: 'Post jobs, review candidates, and build your team with ease.',
     features: ['Post unlimited jobs', 'Smart candidate matching', 'Manage applications'],
     gradient: ['#065F46', '#047857', '#059669'] as [string, string, string],
     cta: 'Register Company',
@@ -38,26 +36,34 @@ const ROLES = [
 ];
 
 function RoleCard({ role, icon: Icon, title, subtitle, features, gradient, cta, index, onPress }: any) {
-  const opacity = useSharedValue(0);
-  const scale   = useSharedValue(0.93);
-  const translateY = useSharedValue(30);
+  const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const delay = index * 180;
-    opacity.value    = withDelay(delay, withTiming(1, { duration: 500 }));
-    scale.value      = withDelay(delay, withSpring(1, { damping: 16 }));
-    translateY.value = withDelay(delay, withSpring(0, { damping: 18 }));
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 480,
+      delay: index * 180,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }, { translateY: translateY.value }],
-  }));
-
   return (
-    <Animated.View style={[styles.cardWrap, style]}>
+    <Animated.View
+      style={[
+        styles.cardWrap,
+        {
+          opacity: anim,
+          transform: [{
+            translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }),
+          }],
+        },
+      ]}
+    >
       <TouchableOpacity
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onPress(role); }}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          onPress(role);
+        }}
         activeOpacity={0.88}
       >
         <LinearGradient
@@ -103,10 +109,6 @@ function RoleCard({ role, icon: Icon, title, subtitle, features, gradient, cta, 
 export default function RoleSelectionScreen() {
   const router = useRouter();
 
-  const handleRoleSelect = (role: Role) => {
-    router.push({ pathname: '/(auth)/register', params: { role } });
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -125,14 +127,24 @@ export default function RoleSelectionScreen() {
       {/* Role cards */}
       <View style={styles.cards}>
         {ROLES.map((r, i) => (
-          <RoleCard key={r.role} {...r} index={i} onPress={handleRoleSelect} />
+          <RoleCard
+            key={r.role}
+            {...r}
+            index={i}
+            onPress={(role: Role) =>
+              router.push({ pathname: '/(auth)/register', params: { role } })
+            }
+          />
         ))}
       </View>
 
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>Already have an account?</Text>
-        <TouchableOpacity onPress={() => router.push('/(auth)/login')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={() => router.push('/(auth)/login')}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
           <Text style={styles.footerLink}>Sign In</Text>
         </TouchableOpacity>
       </View>
@@ -157,16 +169,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   headerText: { gap: 4 },
-  heading:    { ...Typography.h1, color: Colors.textPrimary },
-  subheading: { ...Typography.bodyLg, color: Colors.textSecondary, lineHeight: 24 },
+  heading:    { fontSize: 28, fontWeight: '700', color: Colors.textPrimary },
+  subheading: { fontSize: 16, color: Colors.textSecondary, lineHeight: 24 },
 
-  cards: {
-    flex: 1,
-    paddingHorizontal: Spacing[5],
-    gap: Spacing[4],
-  },
-  cardWrap: { borderRadius: Radius.xl, overflow: 'hidden' },
-  card:     { padding: Spacing[6], borderRadius: Radius.xl, gap: Spacing[5] },
+  cards:   { flex: 1, paddingHorizontal: Spacing[5], gap: Spacing[4] },
+  cardWrap:{ borderRadius: Radius.xl, overflow: 'hidden' },
+  card:    { padding: Spacing[6], borderRadius: Radius.xl, gap: Spacing[5] },
 
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing[4] },
   cardIconWrap: {
@@ -174,7 +182,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-  cardTitles: { flex: 1 },
+  cardTitles:   { flex: 1 },
   cardTitle:    { fontSize: 24, fontWeight: '700', color: Palette.white, marginBottom: 2 },
   cardSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
 
@@ -190,7 +198,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.2)',
   },
-  cardCtaText:  { fontSize: 15, fontWeight: '700', color: Palette.white },
+  cardCtaText: { fontSize: 15, fontWeight: '700', color: Palette.white },
   cardCtaArrow: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: Palette.white,
@@ -204,6 +212,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing[6],
     gap: Spacing[2],
   },
-  footerText: { ...Typography.body, color: Colors.textSecondary },
-  footerLink: { ...Typography.body, fontWeight: '600', color: Colors.primary },
+  footerText: { fontSize: 15, color: Colors.textSecondary },
+  footerLink: { fontSize: 15, fontWeight: '600', color: Colors.primary },
 });
