@@ -28,7 +28,7 @@ interface AuthState {
   setLoading: (loading: boolean) => void;
 
   signUp: (email: string, password: string, role: 'job_seeker' | 'employer') => Promise<{ error: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: any; user: User | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
 
@@ -66,18 +66,29 @@ export const useAuthStore = create<AuthState>()(
 
       signIn: async (email, password) => {
         const { user, session, error } = await authSignIn(email, password);
-        if (error) return { error: { message: error } };
+        if (error) return { error: { message: error }, user: null };
         if (user && session) {
           set({ user, session, isAuthenticated: true });
-          if (user.role === 'job_seeker') await get().fetchJobSeekerProfile();
-          else if (user.role === 'employer') await get().fetchEmployerProfile();
+          // Fetch role-specific profile
+          if (user.role === 'job_seeker') {
+            await get().fetchJobSeekerProfile();
+          } else if (user.role === 'employer') {
+            await get().fetchEmployerProfile();
+          }
+          // admin role: no extra profile table needed
         }
-        return { error: null };
+        return { error: null, user: user ?? null };
       },
 
       signOut: async () => {
         await authSignOut();
-        set({ user: null, jobSeeker: null, employer: null, session: null, isAuthenticated: false });
+        set({
+          user: null,
+          jobSeeker: null,
+          employer: null,
+          session: null,
+          isAuthenticated: false,
+        });
       },
 
       resetPassword: async (email) => {
@@ -140,13 +151,17 @@ export const useAuthStore = create<AuthState>()(
           const user = await getCurrentUser();
           if (user) {
             set({ user, session, isAuthenticated: true });
-            if (user.role === 'job_seeker') await get().fetchJobSeekerProfile();
-            else if (user.role === 'employer') await get().fetchEmployerProfile();
+            if (user.role === 'job_seeker') {
+              await get().fetchJobSeekerProfile();
+            } else if (user.role === 'employer') {
+              await get().fetchEmployerProfile();
+            }
           } else {
-            set({ isAuthenticated: false });
+            set({ isAuthenticated: false, user: null, session: null });
           }
         } catch (err) {
           console.error('refreshUser error:', err);
+          set({ isAuthenticated: false });
         } finally {
           set({ isLoading: false });
         }

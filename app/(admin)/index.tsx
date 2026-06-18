@@ -20,8 +20,11 @@ import {
   AlertCircle,
   CheckCircle,
   ArrowRight,
+  LogOut,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/authStore';
+import { useSignOut } from '@/hooks/useSignOut';
 
 interface DashboardStats {
   totalUsers: number;
@@ -35,6 +38,8 @@ interface DashboardStats {
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
+  const { user } = useAuthStore();
+  const { handleSignOut } = useSignOut();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
@@ -92,8 +97,13 @@ export default function AdminDashboardScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Admin Dashboard</Text>
-          <Text style={styles.headerSubtitle}>Platform Overview</Text>
+          <View>
+            <Text style={styles.headerTitle}>Admin Dashboard</Text>
+            <Text style={styles.headerSubtitle}>{user?.email || 'Platform Overview'}</Text>
+          </View>
+          <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+            <LogOut color="#EF4444" size={20} />
+          </TouchableOpacity>
         </View>
 
         {/* Stats Cards */}
@@ -232,6 +242,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  signOutBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 28,

@@ -25,6 +25,7 @@ import {
   Play,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { formatDate } from '@/utils/formatters';
 import { Job } from '@/types/database';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -113,13 +114,6 @@ export default function EmployerJobsScreen() {
     );
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {

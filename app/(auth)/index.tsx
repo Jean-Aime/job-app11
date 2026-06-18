@@ -1,19 +1,41 @@
+import { useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Briefcase, Users, Building2, MapPin } from 'lucide-react-native';
+import { useAuthStore } from '@/stores/authStore';
 
 const { width, height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { isAuthenticated, user } = useAuthStore();
+
+  // Auto-redirect authenticated users to their role area
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      redirectByRole(user.role);
+    }
+  }, [isAuthenticated, user]);
+
+  const redirectByRole = (role: string) => {
+    switch (role) {
+      case 'admin':
+        router.replace('/(admin)');
+        break;
+      case 'employer':
+        router.replace('/(employer)');
+        break;
+      default:
+        router.replace('/(job-seeker)');
+    }
+  };
 
   return (
     <View style={styles.container}>

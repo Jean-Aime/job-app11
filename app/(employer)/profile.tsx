@@ -31,10 +31,12 @@ import {
 } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
+import { useSignOut } from '@/hooks/useSignOut';
 
 export default function EmployerProfileScreen() {
   const router = useRouter();
-  const { user, employer, signOut, fetchEmployerProfile } = useAuthStore();
+  const { user, employer, fetchEmployerProfile } = useAuthStore();
+  const { handleSignOut } = useSignOut();
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -101,20 +103,6 @@ export default function EmployerProfileScreen() {
       setEditing(false);
       fetchEmployerProfile();
     }
-  };
-
-  const handleSignOut = async () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/(auth)');
-        },
-      },
-    ]);
   };
 
   const getVerificationStatusColor = () => {

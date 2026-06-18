@@ -25,6 +25,7 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { Job } from '@/types/database';
+import { formatTimeAgo, formatSalary } from '@/utils/formatters';
 
 const { width } = Dimensions.get('window');
 
@@ -127,27 +128,6 @@ export default function JobsScreen() {
     }
   };
 
-  const formatTimeAgo = (date: string) => {
-    const now = new Date();
-    const posted = new Date(date);
-    const diffMs = now.getTime() - posted.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-
-    if (diffHours < 1) return 'Just now';
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return `${Math.floor(diffDays / 7)}w ago`;
-  };
-
-  const formatSalary = (min: number | null, max: number | null, currency: string) => {
-    if (!min && !max) return 'Salary not specified';
-    const curr = currency || 'RWF';
-    if (min && max) return `${curr} ${min.toLocaleString()} - ${max.toLocaleString()}`;
-    if (min) return `${curr} ${min.toLocaleString()}+`;
-    return `Up to ${curr} ${max?.toLocaleString()}`;
-  };
 
   const renderJob = ({ item }: { item: Job }) => (
     <TouchableOpacity

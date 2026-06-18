@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { formatDate } from '@/utils/formatters';
 import { User } from '@/types/database';
 
 export default function AdminUsersScreen() {
@@ -77,13 +78,6 @@ export default function AdminUsersScreen() {
     { value: 'active', label: 'Active' },
   ];
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
 
   const renderUser = ({ item }: { item: User & { job_seeker?: any } }) => (
     <TouchableOpacity

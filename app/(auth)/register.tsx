@@ -56,13 +56,14 @@ export default function RegisterScreen() {
 
     if (error) {
       Alert.alert('Registration Failed', error.message || 'An error occurred. Please try again.');
+      return;
+    }
+
+    // Redirect based on role — auth guard in each layout also protects these routes
+    if (isEmployer) {
+      router.replace('/(employer)');
     } else {
-      // Redirect based on role
-      if (isEmployer) {
-        router.replace('/(employer)');
-      } else {
-        router.replace('/(job-seeker)');
-      }
+      router.replace('/(job-seeker)');
     }
   };
 

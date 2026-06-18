@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Dimensions,
   RefreshControl,
   Image,
 } from 'react-native';
@@ -27,62 +26,87 @@ import {
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { Job, JobCategory } from '@/types/database';
+import { formatTimeAgo, formatSalary, getGreeting } from '@/utils/formatters';
 
-const { width } = Dimensions.get('window');
+interface JobWithMatch extends Job {
+  match_score?: number;
+  employer?: any;
+  category?: any;
+}
 
 export default function JobSeekerHomeScreen() {
   const router = useRouter();
-  const { jobSeeker, user } = useAuthStore();
+  const { jobSeeker } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [categories, setCategories] = useState<JobCategory[]>([]);
-  const [recommendedJobs, setRecommendedJobs] = useState<Job[]>([]);
+  const [recommendedJobs, setRecommendedJobs] = useState<JobWithMatch[]>([]);
   const [recentJobs, setRecentJobs] = useState<Job[]>([]);
+  const [stats, setStats] = useState({ applications: 0, matches: 0, saved: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [jobSeeker?.id]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch categories
-      const { data: categoriesData } = await supabase
+      // Categories
+      const { data: catData } = await supabase
         .from('job_categories')
         .select('*')
         .limit(8);
+      if (catData) setCategories(catData as JobCategory[]);
 
-      if (categoriesData) setCategories(categoriesData);
-
-      // Fetch recent jobs
+      // Recent jobs
       const { data: jobsData } = await supabase
         .from('jobs')
-        .select(`
-          *,
-          employer:employers(company_name, company_logo_url),
-          category:job_categories(name)
-        `)
+        .select('*, employer:employers(company_name, company_logo_url), category:job_categories(name)')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(10);
+      if (jobsData) setRecentJobs(jobsData as Job[]);
 
-      if (jobsData) setRecentJobs(jobsData);
+      if (jobSeeker?.id) {
+        // Recommended: real match scores from job_matches table
+        const { data: matchData } = await supabase
+          .from('job_matches')
+          .select('match_score, job:jobs(*, employer:employers(company_name, company_logo_url), category:job_categories(name))')
+          .eq('job_seeker_id', jobSeeker.id)
+          .order('match_score', { ascending: false })
+          .limit(5);
 
-      // Fetch recommended jobs (random for now)
-      const { data: recommendedData } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          employer:employers(company_name, company_logo_url),
-          category:job_categories(name)
-        `)
-        .eq('status', 'active')
-        .limit(5);
+        if (matchData && matchData.length > 0) {
+          const withScores: JobWithMatch[] = matchData.map((m: any) => ({
+            ...(Array.isArray(m.job) ? m.job[0] : m.job),
+            match_score: m.match_score,
+          }));
+          setRecommendedJobs(withScores.filter(Boolean));
+        } else {
+          // Fallback when no match scores exist yet
+          const { data: fallback } = await supabase
+            .from('jobs')
+            .select('*, employer:employers(company_name, company_logo_url), category:job_categories(name)')
+            .eq('status', 'active')
+            .limit(5);
+          if (fallback) setRecommendedJobs(fallback as JobWithMatch[]);
+        }
 
-      if (recommendedData) setRecommendedJobs(recommendedData);
+        // Real stats
+        const [appRes, matchRes, savedRes] = await Promise.all([
+          supabase.from('applications').select('id', { count: 'exact', head: true }).eq('job_seeker_id', jobSeeker.id),
+          supabase.from('job_matches').select('id', { count: 'exact', head: true }).eq('job_seeker_id', jobSeeker.id),
+          supabase.from('saved_jobs').select('id', { count: 'exact', head: true }).eq('job_seeker_id', jobSeeker.id),
+        ]);
+        setStats({
+          applications: appRes.count ?? 0,
+          matches: matchRes.count ?? 0,
+          saved: savedRes.count ?? 0,
+        });
+      }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Home fetchData error:', error);
     } finally {
       setLoading(false);
     }
@@ -92,35 +116,6 @@ export default function JobSeekerHomeScreen() {
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
-  };
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 18) return 'Good Afternoon';
-    return 'Good Evening';
-  };
-
-  const formatTimeAgo = (date: string) => {
-    const now = new Date();
-    const posted = new Date(date);
-    const diffMs = now.getTime() - posted.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-
-    if (diffHours < 1) return 'Just now';
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return `${Math.floor(diffDays / 7)}w ago`;
-  };
-
-  const formatSalary = (min: number | null, max: number | null, currency: string) => {
-    if (!min && !max) return 'Salary not specified';
-    const curr = currency || 'RWF';
-    if (min && max) return `${curr} ${min.toLocaleString()} - ${max.toLocaleString()}`;
-    if (min) return `${curr} ${min.toLocaleString()}+`;
-    return `Up to ${curr} ${max?.toLocaleString()}`;
   };
 
   return (
@@ -145,7 +140,7 @@ export default function JobSeekerHomeScreen() {
               onPress={() => router.push('/(job-seeker)/applications')}
             >
               <Bell color="#1E293B" size={24} />
-              <View style={styles.notificationBadge} />
+              {stats.applications > 0 && <View style={styles.notificationBadge} />}
             </TouchableOpacity>
           </View>
 
@@ -158,9 +153,15 @@ export default function JobSeekerHomeScreen() {
               placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
-              onSubmitEditing={() => router.push(`/(job-seeker)/jobs?search=${searchQuery}`)}
+              onSubmitEditing={() =>
+                router.push(`/(job-seeker)/jobs?search=${searchQuery}`)
+              }
+              returnKeyType="search"
             />
-            <TouchableOpacity style={styles.filterButton}>
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={() => router.push('/(job-seeker)/map')}
+            >
               <MapPin color="#2563EB" size={20} />
             </TouchableOpacity>
           </View>
@@ -190,17 +191,17 @@ export default function JobSeekerHomeScreen() {
           </View>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>0</Text>
+              <Text style={styles.statValue}>{stats.applications}</Text>
               <Text style={styles.statLabel}>Applications</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>0</Text>
+              <Text style={styles.statValue}>{stats.matches}</Text>
               <Text style={styles.statLabel}>Matches</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>0</Text>
+              <Text style={styles.statValue}>{stats.saved}</Text>
               <Text style={styles.statLabel}>Saved</Text>
             </View>
           </View>
@@ -223,7 +224,9 @@ export default function JobSeekerHomeScreen() {
               <TouchableOpacity
                 key={category.id}
                 style={styles.categoryItem}
-                onPress={() => router.push(`/(job-seeker)/jobs?category=${category.id}`)}
+                onPress={() =>
+                  router.push(`/(job-seeker)/jobs?category=${category.id}`)
+                }
               >
                 <View style={styles.categoryIcon}>
                   <Briefcase color="#2563EB" size={24} />
@@ -273,10 +276,14 @@ export default function JobSeekerHomeScreen() {
                       {job.employer?.company_name}
                     </Text>
                   </View>
-                  <View style={styles.jobMatch}>
-                    <Text style={styles.matchScore}>95%</Text>
-                    <Text style={styles.matchLabel}>Match</Text>
-                  </View>
+                  {job.match_score != null && (
+                    <View style={styles.jobMatch}>
+                      <Text style={styles.matchScore}>
+                        {Math.round(job.match_score)}%
+                      </Text>
+                      <Text style={styles.matchLabel}>Match</Text>
+                    </View>
+                  )}
                 </View>
                 <View style={styles.jobCardFooter}>
                   <View style={styles.jobMeta}>
@@ -286,7 +293,7 @@ export default function JobSeekerHomeScreen() {
                   <View style={styles.jobMeta}>
                     <Briefcase color="#94A3B8" size={14} />
                     <Text style={styles.jobMetaText}>
-                      {job.employment_type.replace('_', ' ')}
+                      {job.employment_type?.replace('_', ' ')}
                     </Text>
                   </View>
                   <View style={styles.jobMeta}>
@@ -355,7 +362,7 @@ export default function JobSeekerHomeScreen() {
                 <View style={styles.jobMeta}>
                   <Briefcase color="#94A3B8" size={14} />
                   <Text style={styles.jobMetaText}>
-                    {job.employment_type.replace('_', ' ')}
+                    {job.employment_type?.replace('_', ' ')}
                   </Text>
                 </View>
                 <View style={styles.jobMeta}>
@@ -376,30 +383,16 @@ export default function JobSeekerHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
   },
-  greeting: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
+  greeting: { fontSize: 14, color: '#64748B' },
+  userName: { fontSize: 24, fontWeight: '700', color: '#1E293B' },
   notificationButton: {
     width: 48,
     height: 48,
@@ -429,14 +422,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1E293B',
-  },
-  filterButton: {
-    padding: 4,
-  },
+  searchInput: { flex: 1, fontSize: 16, color: '#1E293B' },
+  filterButton: { padding: 4 },
   statsCard: {
     marginHorizontal: 20,
     borderRadius: 20,
@@ -449,11 +436,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  statsTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
+  statsTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
   statsSubtitle: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
@@ -468,25 +451,14 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 4,
   },
-  statsButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
+  statsButtonText: { fontSize: 13, fontWeight: '600', color: '#2563EB' },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
+  statItem: { alignItems: 'center', flex: 1 },
+  statValue: { fontSize: 28, fontWeight: '700', color: '#FFFFFF' },
   statLabel: {
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.8)',
@@ -496,41 +468,20 @@ const styles = StyleSheet.create({
     width: 1,
     height: 40,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  marginHorizontal: 20,
+    marginHorizontal: 20,
   },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
+  section: { paddingHorizontal: 20, marginBottom: 24 },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  sectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  seeAll: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2563EB',
-  },
-  categoriesContainer: {
-    paddingRight: 20,
-    gap: 12,
-  },
-  categoryItem: {
-    alignItems: 'center',
-    width: 80,
-  },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1E293B' },
+  seeAll: { fontSize: 14, fontWeight: '600', color: '#2563EB' },
+  categoriesContainer: { paddingRight: 20, gap: 12 },
+  categoryItem: { alignItems: 'center', width: 80 },
   categoryIcon: {
     width: 64,
     height: 64,
@@ -556,10 +507,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  jobCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  jobCardHeader: { flexDirection: 'row', alignItems: 'center' },
   companyLogo: {
     width: 48,
     height: 48,
@@ -569,24 +517,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  logoImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-  },
-  jobInfo: {
-    flex: 1,
-  },
+  logoImage: { width: 48, height: 48, borderRadius: 12 },
+  jobInfo: { flex: 1 },
   jobTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1E293B',
     marginBottom: 4,
   },
-  companyName: {
-    fontSize: 14,
-    color: '#64748B',
-  },
+  companyName: { fontSize: 14, color: '#64748B' },
   jobSalary: {
     fontSize: 14,
     fontWeight: '500',
@@ -600,15 +539,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     borderRadius: 8,
   },
-  matchScore: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#2563EB',
-  },
-  matchLabel: {
-    fontSize: 10,
-    color: '#2563EB',
-  },
+  matchScore: { fontSize: 16, fontWeight: '700', color: '#2563EB' },
+  matchLabel: { fontSize: 10, color: '#2563EB' },
   jobCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -618,15 +550,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     gap: 16,
   },
-  jobMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  jobMetaText: {
-    fontSize: 13,
-    color: '#64748B',
-  },
+  jobMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  jobMetaText: { fontSize: 13, color: '#64748B' },
   emptyState: {
     alignItems: 'center',
     padding: 24,
@@ -635,12 +560,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  bottomPadding: {
-    height: 100,
-  },
+  emptyStateText: { fontSize: 14, color: '#64748B', textAlign: 'center' },
+  bottomPadding: { height: 100 },
 });

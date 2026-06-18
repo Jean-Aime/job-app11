@@ -27,6 +27,7 @@ import {
 } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
+import { formatDate } from '@/utils/formatters';
 import { Job, Application } from '@/types/database';
 
 interface DashboardStats {
@@ -110,12 +111,6 @@ export default function EmployerDashboardScreen() {
     fetchDashboardData();
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
-  };
 
   return (
     <SafeAreaView style={styles.container}>

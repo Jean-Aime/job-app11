@@ -30,7 +30,7 @@ export function useNotifications() {
     if (!user) return;
     setLoading(true);
     const { data, error } = await supabase
-      .from<Notification>('notifications')
+      .from('notifications')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })

@@ -30,21 +30,31 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const { signIn, isLoading } = useAuthStore();
 
-  const { control, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-    },
+    defaultValues: { email: '', password: '' },
   });
 
   const onSubmit = async (data: LoginFormData) => {
-    const { error } = await signIn(data.email, data.password);
+    const { error, user } = await signIn(data.email, data.password);
 
     if (error) {
       Alert.alert('Login Failed', error.message || 'Invalid credentials. Please try again.');
+      return;
     }
-    // Navigation is handled in auth store after successful login
+
+    // Navigate based on role
+    if (user?.role === 'admin') {
+      router.replace('/(admin)');
+    } else if (user?.role === 'employer') {
+      router.replace('/(employer)');
+    } else {
+      router.replace('/(job-seeker)');
+    }
   };
 
   return (
@@ -55,16 +65,11 @@ export default function LoginScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <ArrowLeft color="#1E293B" size={24} />
           </TouchableOpacity>
           <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>
-            Sign in to continue your journey
-          </Text>
+          <Text style={styles.subtitle}>Sign in to continue your journey</Text>
         </View>
 
         {/* Form */}
@@ -86,13 +91,12 @@ export default function LoginScreen() {
                     onChangeText={onChange}
                     keyboardType="email-address"
                     autoCapitalize="none"
+                    autoCorrect={false}
                   />
                 </View>
               )}
             />
-            {errors.email && (
-              <Text style={styles.errorText}>{errors.email.message}</Text>
-            )}
+            {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
           </View>
 
           {/* Password */}
@@ -123,9 +127,7 @@ export default function LoginScreen() {
                 </View>
               )}
             />
-            {errors.password && (
-              <Text style={styles.errorText}>{errors.password.message}</Text>
-            )}
+            {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
           </View>
 
           {/* Forgot Password */}
@@ -136,7 +138,7 @@ export default function LoginScreen() {
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
 
-          {/* Submit Button */}
+          {/* Submit */}
           <TouchableOpacity
             style={styles.submitButton}
             onPress={handleSubmit(onSubmit)}
@@ -176,9 +178,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
   },
-  keyboardView: {
-    flex: 1,
-  },
+  keyboardView: { flex: 1 },
   header: {
     marginTop: 12,
     marginBottom: 40,
@@ -203,12 +203,8 @@ const styles = StyleSheet.create({
     color: '#64748B',
     lineHeight: 22,
   },
-  form: {
-    gap: 20,
-  },
-  inputGroup: {
-    gap: 8,
-  },
+  form: { gap: 20 },
+  inputGroup: { gap: 8 },
   label: {
     fontSize: 15,
     fontWeight: '500',
@@ -225,22 +221,10 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: '#F8FAFC',
   },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1E293B',
-  },
-  errorText: {
-    fontSize: 13,
-    color: '#EF4444',
-    marginTop: 4,
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-  },
+  inputError: { borderColor: '#EF4444' },
+  input: { flex: 1, fontSize: 16, color: '#1E293B' },
+  errorText: { fontSize: 13, color: '#EF4444', marginTop: 4 },
+  forgotPassword: { alignSelf: 'flex-end' },
   forgotPasswordText: {
     fontSize: 14,
     fontWeight: '500',
@@ -264,11 +248,7 @@ const styles = StyleSheet.create({
     marginTop: 32,
     marginBottom: 24,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E2E8F0',
-  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
   dividerText: {
     fontSize: 14,
     color: '#94A3B8',
@@ -282,10 +262,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 8,
   },
-  footerText: {
-    fontSize: 15,
-    color: '#64748B',
-  },
+  footerText: { fontSize: 15, color: '#64748B' },
   footerLink: {
     fontSize: 15,
     fontWeight: '600',

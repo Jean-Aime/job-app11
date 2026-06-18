@@ -1,12 +1,14 @@
-// Environment Types
+declare module '@env' {
+  export const EXPO_PUBLIC_NEON_DATABASE_URL: string;
+  export const EXPO_PUBLIC_JWT_SECRET: string;
+}
+
+// Augment the process.env type to reflect the actual env vars used
 declare global {
   namespace NodeJS {
     interface ProcessEnv {
-      EXPO_PUBLIC_SUPABASE_URL: string;
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: string;
-      EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?: string;
+      EXPO_PUBLIC_NEON_DATABASE_URL: string;
+      EXPO_PUBLIC_JWT_SECRET: string;
     }
   }
 }
-
-export {};

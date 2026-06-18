@@ -1,7 +1,19 @@
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { LayoutDashboard, Users, Building2, Briefcase, FileCheck } from 'lucide-react-native';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 export default function AdminLayout() {
+  const { isLoading } = useAuthGuard('admin');
+
+  if (isLoading) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#8B5CF6" />
+      </View>
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -27,47 +39,46 @@ export default function AdminLayout() {
         name="index"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => (
-            <LayoutDashboard color={color} size={size} />
-          ),
+          tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="users"
         options={{
           title: 'Users',
-          tabBarIcon: ({ color, size }) => (
-            <Users color={color} size={size} />
-          ),
+          tabBarIcon: ({ color, size }) => <Users color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="employers"
         options={{
           title: 'Employers',
-          tabBarIcon: ({ color, size }) => (
-            <Building2 color={color} size={size} />
-          ),
+          tabBarIcon: ({ color, size }) => <Building2 color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="jobs"
         options={{
           title: 'Jobs',
-          tabBarIcon: ({ color, size }) => (
-            <Briefcase color={color} size={size} />
-          ),
+          tabBarIcon: ({ color, size }) => <Briefcase color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="applications"
         options={{
           title: 'Reviews',
-          tabBarIcon: ({ color, size }) => (
-            <FileCheck color={color} size={size} />
-          ),
+          tabBarIcon: ({ color, size }) => <FileCheck color={color} size={size} />,
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+});

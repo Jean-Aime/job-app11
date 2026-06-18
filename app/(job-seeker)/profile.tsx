@@ -31,10 +31,12 @@ import {
 } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
+import { useSignOut } from '@/hooks/useSignOut';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, jobSeeker, signOut, fetchJobSeekerProfile } = useAuthStore();
+  const { user, jobSeeker, fetchJobSeekerProfile } = useAuthStore();
+  const { handleSignOut } = useSignOut();
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -122,19 +124,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSignOut = async () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/(auth)');
-        },
-      },
-    ]);
-  };
+  const handleSignOutLocal = () => handleSignOut();
 
   const profileCompletion = jobSeeker?.profile_completion_score || 0;
 

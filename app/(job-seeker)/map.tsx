@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { formatTimeAgo } from '@/utils/formatters';
 import { Job } from '@/types/database';
 
 const { width, height } = Dimensions.get('window');
@@ -56,15 +57,6 @@ export default function MapScreen() {
     setLoading(false);
   };
 
-  const formatTimeAgo = (date: string) => {
-    const now = new Date();
-    const posted = new Date(date);
-    const diffDays = Math.floor((now.getTime() - posted.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return `${Math.floor(diffDays / 7)}w ago`;
-  };
 
   // Use real jobs data
   const nearbyJobs = jobs.map((job: any) => ({
@@ -290,11 +282,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
     elevation: 4,
+    boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
   },
   mapPlaceholderText: {
     fontSize: 16,

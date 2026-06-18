@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
@@ -7,22 +7,13 @@ import { useAuthStore } from '@/stores/authStore';
 
 export default function RootLayout() {
   useFrameworkReady();
-  const [isReady, setIsReady] = useState(false);
-  const { refreshUser } = useAuthStore();
+  const { isLoading, refreshUser } = useAuthStore();
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        await refreshUser();
-      } catch (error) {
-        console.log('Auth refresh error:', error);
-      }
-      setIsReady(true);
-    };
-    init();
+    refreshUser();
   }, []);
 
-  if (!isReady) {
+  if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#2563EB" />

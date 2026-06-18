@@ -24,6 +24,7 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { formatDate } from '@/utils/formatters';
 import { Application } from '@/types/database';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -88,13 +89,6 @@ export default function ApplicationsScreen() {
     fetchApplications();
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
 
   const getStatusConfig = (status: string) => {
     return statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
