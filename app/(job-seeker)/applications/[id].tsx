@@ -155,7 +155,7 @@ export default function ApplicationDetailScreen() {
           </View>
         </View>
 
-        <View style={{ height: 100 }} />
+        <View style={G.listBottom} />
       </ScrollView>
 
       {/* Footer */}

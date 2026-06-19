@@ -110,7 +110,7 @@ export default function RoleSelectionScreen() {
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top','bottom']}>
       <StatusBar barStyle="dark-content" />
 
       {/* Header */}

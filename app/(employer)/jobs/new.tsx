@@ -179,7 +179,7 @@ export default function PostJobScreen() {
           </>
         )}
 
-        <View style={{ height: 120 }} />
+        <View style={G.listBottom} />
       </ScrollView>
 
       {/* Footer */}

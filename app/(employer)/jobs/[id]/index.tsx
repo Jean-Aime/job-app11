@@ -197,7 +197,7 @@ export default function EmployerJobDetailScreen() {
           )}
         </View>
 
-        <View style={{ height: 120 }} />
+        <View style={G.listBottom} />
       </ScrollView>
 
       {/* Footer actions */}

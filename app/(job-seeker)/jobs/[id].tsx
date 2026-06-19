@@ -190,7 +190,7 @@ export default function JobDetailsScreen() {
           </View>
         </View>
 
-        <View style={{ height: 120 }} />
+        <View style={G.listBottom} />
       </ScrollView>
 
       {/* Bottom CTA */}

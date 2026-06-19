@@ -140,7 +140,7 @@ export default function CandidateDetailScreen() {
           </View>
         )}
 
-        <View style={{ height: 120 }} />
+        <View style={G.listBottom} />
       </ScrollView>
 
       {/* Actions */}
