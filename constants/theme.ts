@@ -9,23 +9,47 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // ─── Breakpoints ─────────────────────────────────────────────────────────────
 export const Breakpoints = {
-  xs:  320,   // iPhone SE 1st gen
-  sm:  375,   // iPhone SE 3rd gen, Pixel 4a
-  md:  414,   // iPhone 14, Pixel 7
-  lg:  768,   // iPad mini, large phones landscape
-  xl:  1024,  // iPad Pro
+  xs:   320,   // iPhone SE 1st gen
+  sm:   360,   // Galaxy S8, small Android
+  md:   375,   // iPhone SE 3rd gen, iPhone 12/13 mini
+  lg:   390,   // iPhone 14, iPhone 15
+  xl:   412,   // Pixel 7, OnePlus
+  xxl:  430,   // iPhone 14 Pro Max, iPhone 15 Pro Max
+  tablet: 768, // iPad mini
+  tabletMd: 820, // iPad Air
+  tabletLg: 834, // iPad 10.2
+  desktop: 1024, // iPad Pro 11
+  desktopLg: 1280, // iPad Pro 12.9 landscape
 } as const;
 
 export const isXSmall = SCREEN_W <= Breakpoints.xs;
-export const isSmall  = SCREEN_W < Breakpoints.sm;
-export const isMedium = SCREEN_W >= Breakpoints.sm && SCREEN_W < Breakpoints.lg;
-export const isTablet = SCREEN_W >= Breakpoints.lg;
+export const isSmall  = SCREEN_W <= Breakpoints.sm;
+export const isMedium = SCREEN_W > Breakpoints.sm && SCREEN_W < Breakpoints.tablet;
+export const isTablet = SCREEN_W >= Breakpoints.tablet && SCREEN_W < Breakpoints.desktop;
+export const isDesktop = SCREEN_W >= Breakpoints.desktop;
 
-// Responsive helper — returns value based on current screen width
-export function responsive<T>(sm: T, md: T, lg?: T): T {
-  if (isTablet && lg !== undefined) return lg;
-  if (SCREEN_W >= Breakpoints.md) return md;
-  return sm;
+// Enhanced responsive helper with full device support
+export function responsive<T>(xs: T, sm?: T, md?: T, lg?: T, xl?: T): T {
+  if (SCREEN_W >= Breakpoints.desktop && xl !== undefined) return xl;
+  if (SCREEN_W >= Breakpoints.tablet && lg !== undefined) return lg;
+  if (SCREEN_W >= Breakpoints.lg && md !== undefined) return md;
+  if (SCREEN_W >= Breakpoints.sm && sm !== undefined) return sm;
+  return xs;
+}
+
+// Responsive padding/spacing utility
+export function responsiveSpacing(base: number, tablet?: number, desktop?: number): number {
+  if (isDesktop && desktop !== undefined) return desktop;
+  if (isTablet && tablet !== undefined) return tablet;
+  return base;
+}
+
+// Responsive font size utility
+export function responsiveFontSize(base: number, tablet?: number, desktop?: number): number {
+  if (isDesktop && desktop !== undefined) return desktop;
+  if (isTablet && tablet !== undefined) return tablet;
+  if (isXSmall) return Math.max(base - 1, 12);
+  return base;
 }
 
 // ─── Color Palette ────────────────────────────────────────────────────────────
@@ -187,38 +211,38 @@ export const Spacing = {
 
 // Named semantic spacing — use these in screens
 export const Space = {
-  // Page layout
-  pagePadding:      Spacing[5],     // 20 — horizontal screen padding
-  pageTop:          Spacing[4],     // 16 — first element from safe area
-  sectionGap:       Spacing[6],     // 24 — gap between major sections
-  sectionGapSm:     Spacing[4],     // 16 — gap between minor sections
+  // Page layout - responsive
+  pagePadding:      responsiveSpacing(16, 24, 32),
+  pageTop:          responsiveSpacing(12, 16, 20),
+  sectionGap:       responsiveSpacing(20, 28, 36),
+  sectionGapSm:     responsiveSpacing(12, 16, 20),
 
-  // Cards
-  cardPadding:      Spacing[4],     // 16 — inner card padding
-  cardPaddingLg:    Spacing[5],     // 20 — large card padding
-  cardGap:          Spacing[3],     // 12 — gap between cards
-  cardGapSm:        Spacing[2],     // 8  — tight card gap
+  // Cards - responsive
+  cardPadding:      responsiveSpacing(14, 16, 20),
+  cardPaddingLg:    responsiveSpacing(16, 20, 24),
+  cardGap:          responsiveSpacing(10, 12, 14),
+  cardGapSm:        responsiveSpacing(6, 8, 10),
 
   // Inputs
-  inputPaddingH:    Spacing[4],     // 16
-  inputPaddingV:    Spacing[3.5],   // 14
-  inputGap:         Spacing[4],     // 16 — gap between form fields
-  formGap:          Spacing[5],     // 20 — gap between form sections
+  inputPaddingH:    responsiveSpacing(14, 16, 18),
+  inputPaddingV:    responsiveSpacing(12, 14, 16),
+  inputGap:         responsiveSpacing(14, 16, 18),
+  formGap:          responsiveSpacing(18, 20, 24),
 
-  // Buttons
-  btnHeight:        52,             // standard button height
-  btnHeightSm:      40,
-  btnHeightLg:      56,
-  btnPaddingV:      Spacing[4],     // 16
+  // Buttons - responsive
+  btnHeight:        responsiveSpacing(48, 52, 56),
+  btnHeightSm:      responsiveSpacing(36, 40, 44),
+  btnHeightLg:      responsiveSpacing(52, 56, 60),
+  btnPaddingV:      responsiveSpacing(14, 16, 18),
 
-  // Navigation chrome
-  tabBarHeight:     64,
-  headerHeight:     56,
-  bottomInset:      34,             // iPhone home indicator
+  // Navigation chrome - responsive
+  tabBarHeight:     Platform.select({ ios: isTablet ? 72 : 64, android: isTablet ? 68 : 60, default: 64 }),
+  headerHeight:     responsiveSpacing(52, 60, 68),
+  bottomInset:      Platform.OS === 'ios' && !isTablet ? 34 : 0,
 
   // Computed
-  listBottom:       64 + 24,        // tabBarHeight + extra breathing room
-  screenBottom:     64 + 34,        // tabBarHeight + bottomInset
+  get listBottom() { return this.tabBarHeight + (isTablet ? 32 : 20); },
+  get screenBottom() { return this.tabBarHeight + this.bottomInset; },
 } as const;
 
 // ─── Border Radius ─────────────────────────────────────────────────────────────

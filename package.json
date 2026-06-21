@@ -11,7 +11,10 @@
     "build:web": "expo export --platform web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node scripts/patch-nav.js"
+    "postinstall": "node scripts/patch-nav.js",
+    "db:test": "node test-db-connection.js",
+    "db:seed": "node seed-comprehensive-data.js",
+    "db:seed-basic": "node seed-sample-data.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
@@ -22,6 +25,7 @@
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.0.14",
     "@types/uuid": "^10.0.0",
+    "dotenv": "^17.4.2",
     "expo": "~54.0.35",
     "expo-blur": "~15.0.8",
     "expo-camera": "~17.0.10",

@@ -1,114 +1,327 @@
+/**
+ * Add Certificate Screen
+ * - Full form with validation
+ * - Saves to Supabase certificates table
+ * - Responsive on all screen sizes
+ */
 import { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  TextInput, Alert, ActivityIndicator, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Award, Building2, Calendar, Link, Hash } from 'lucide-react-native';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import {
+  ArrowLeft, Award, Building2, Calendar, Link2, Hash, Check,
+} from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
-import {
-  Colors, Typography, Spacing, Space, G, Palette,
-} from '@/constants/theme';
+import { Colors, Palette } from '@/constants/theme';
 
-const schema = z.object({
-  title:                 z.string().min(1, 'Title is required'),
-  issuing_organization:  z.string().optional(),
-  issue_date:            z.string().optional(),
-  expiry_date:           z.string().optional(),
-  certificate_url:       z.string().optional(),
-  credential_id:         z.string().optional(),
-});
-type Form = z.infer<typeof schema>;
+interface FieldProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  keyboardType?: any;
+  required?: boolean;
+  hint?: string;
+  icon?: React.ReactNode;
+  error?: string;
+}
 
-export default function NewCertificateScreen() {
+function Field({ label, value, onChange, placeholder, keyboardType, required, hint, icon, error }: FieldProps) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={f.wrap}>
+      <Text style={f.label}>
+        {label}{required && <Text style={f.req}> *</Text>}
+      </Text>
+      <View style={[f.row, focused && f.focused, error && f.err]}>
+        {icon && <View style={f.icon}>{icon}</View>}
+        <TextInput
+          style={f.input}
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder}
+          placeholderTextColor="#94A3B8"
+          keyboardType={keyboardType || 'default'}
+          autoCapitalize={keyboardType === 'url' || keyboardType === 'email-address' ? 'none' : 'sentences'}
+          autoCorrect={keyboardType === 'url' ? false : true}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        />
+      </View>
+      {error && <Text style={f.errText}>{error}</Text>}
+      {hint && !error && <Text style={f.hint}>{hint}</Text>}
+    </View>
+  );
+}
+
+export default function AddCertificateScreen() {
   const router = useRouter();
   const { jobSeeker } = useAuthStore();
   const [saving, setSaving] = useState(false);
-
-  const { control, handleSubmit, formState: { errors } } = useForm<Form>({
-    resolver: zodResolver(schema),
-    defaultValues: { title: '', issuing_organization: '', issue_date: '', expiry_date: '', certificate_url: '', credential_id: '' },
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [form, setForm] = useState({
+    title:                '',
+    issuing_organization: '',
+    issue_date:           '',
+    expiry_date:          '',
+    credential_id:        '',
+    certificate_url:      '',
   });
 
-  const onSubmit = async (data: Form) => {
-    if (!jobSeeker) return;
+  const set = (key: string) => (val: string) => {
+    setForm(p => ({ ...p, [key]: val }));
+    if (errors[key]) setErrors(p => ({ ...p, [key]: '' }));
+  };
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!form.title.trim()) e.title = 'Certificate title is required';
+    if (form.issue_date && !/^\d{4}-\d{2}-\d{2}$/.test(form.issue_date))
+      e.issue_date = 'Use format YYYY-MM-DD';
+    if (form.expiry_date && !/^\d{4}-\d{2}-\d{2}$/.test(form.expiry_date))
+      e.expiry_date = 'Use format YYYY-MM-DD';
+    if (form.certificate_url && !form.certificate_url.startsWith('http'))
+      e.certificate_url = 'Must start with http:// or https://';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validate() || !jobSeeker) return;
     setSaving(true);
-    const payload = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== ''));
-    const { error } = await supabase.from('certificates').insert({ ...payload, job_seeker_id: jobSeeker.id });
+    const payload: any = { job_seeker_id: jobSeeker.id };
+    Object.entries(form).forEach(([k, v]) => {
+      if (v.trim()) payload[k] = v.trim();
+    });
+    const { error } = await supabase.from('certificates').insert(payload);
     setSaving(false);
-    if (error) { Alert.alert('Error', 'Failed to save certificate.'); }
-    else { router.back(); }
+    if (error) {
+      Alert.alert('Error', 'Could not save certificate. Please try again.');
+      return;
+    }
+    router.back();
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.navBar}>
-        <TouchableOpacity style={G.backBtn} onPress={() => router.back()}>
-          <ArrowLeft color={Colors.textPrimary} size={20} strokeWidth={2} />
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+          <ArrowLeft color="#0F172A" size={20} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={styles.navTitle}>Add Certificate</Text>
+        <View style={s.headerText}>
+          <Text style={s.title}>Add Certificate</Text>
+          <Text style={s.subtitle}>Add your certifications & achievements</Text>
+        </View>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Controller control={control} name="title" render={({ field: { onChange, value } }) => (
-          <Input label="Certificate Title" placeholder="e.g. AWS Solutions Architect" value={value} onChangeText={onChange}
-            leftIcon={<Award color={Colors.textMuted} size={17} strokeWidth={2} />}
-            error={errors.title?.message} required />
-        )} />
-
-        <Controller control={control} name="issuing_organization" render={({ field: { onChange, value } }) => (
-          <Input label="Issuing Organization" placeholder="e.g. Amazon Web Services" value={value || ''} onChangeText={onChange}
-            leftIcon={<Building2 color={Colors.textMuted} size={17} strokeWidth={2} />} />
-        )} />
-
-        <View style={styles.row}>
-          <View style={styles.half}>
-            <Controller control={control} name="issue_date" render={({ field: { onChange, value } }) => (
-              <Input label="Issue Date" placeholder="YYYY-MM-DD" value={value || ''} onChangeText={onChange}
-                leftIcon={<Calendar color={Colors.textMuted} size={17} strokeWidth={2} />} />
-            )} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* ── Core Info ── */}
+        <View style={s.card}>
+          <View style={s.cardTitleRow}>
+            <View style={s.cardIconWrap}>
+              <Award color={Colors.primary} size={18} strokeWidth={2} />
+            </View>
+            <Text style={s.cardTitle}>Certificate Details</Text>
           </View>
-          <View style={styles.half}>
-            <Controller control={control} name="expiry_date" render={({ field: { onChange, value } }) => (
-              <Input label="Expiry Date" placeholder="YYYY-MM-DD" value={value || ''} onChangeText={onChange}
-                leftIcon={<Calendar color={Colors.textMuted} size={17} strokeWidth={2} />} />
-            )} />
+
+          <Field
+            label="Certificate Title"
+            value={form.title}
+            onChange={set('title')}
+            placeholder="e.g. AWS Solutions Architect – Associate"
+            required
+            icon={<Award color="#94A3B8" size={16} strokeWidth={2} />}
+            error={errors.title}
+          />
+
+          <Field
+            label="Issuing Organisation"
+            value={form.issuing_organization}
+            onChange={set('issuing_organization')}
+            placeholder="e.g. Amazon Web Services"
+            icon={<Building2 color="#94A3B8" size={16} strokeWidth={2} />}
+          />
+        </View>
+
+        {/* ── Dates ── */}
+        <View style={s.card}>
+          <View style={s.cardTitleRow}>
+            <View style={s.cardIconWrap}>
+              <Calendar color="#059669" size={18} strokeWidth={2} />
+            </View>
+            <Text style={s.cardTitle}>Validity</Text>
+          </View>
+
+          <View style={s.row}>
+            <View style={s.half}>
+              <Field
+                label="Issue Date"
+                value={form.issue_date}
+                onChange={set('issue_date')}
+                placeholder="YYYY-MM-DD"
+                icon={<Calendar color="#94A3B8" size={16} strokeWidth={2} />}
+                error={errors.issue_date}
+                hint="Leave blank if unknown"
+              />
+            </View>
+            <View style={s.half}>
+              <Field
+                label="Expiry Date"
+                value={form.expiry_date}
+                onChange={set('expiry_date')}
+                placeholder="YYYY-MM-DD"
+                icon={<Calendar color="#94A3B8" size={16} strokeWidth={2} />}
+                error={errors.expiry_date}
+                hint="Leave blank if no expiry"
+              />
+            </View>
           </View>
         </View>
 
-        <Controller control={control} name="credential_id" render={({ field: { onChange, value } }) => (
-          <Input label="Credential ID" placeholder="e.g. ABC-123456" value={value || ''} onChangeText={onChange}
-            leftIcon={<Hash color={Colors.textMuted} size={17} strokeWidth={2} />} />
-        )} />
+        {/* ── Verification ── */}
+        <View style={s.card}>
+          <View style={s.cardTitleRow}>
+            <View style={[s.cardIconWrap, { backgroundColor: '#F0FDF4' }]}>
+              <Hash color="#059669" size={18} strokeWidth={2} />
+            </View>
+            <Text style={s.cardTitle}>Verification (optional)</Text>
+          </View>
 
-        <Controller control={control} name="certificate_url" render={({ field: { onChange, value } }) => (
-          <Input label="Certificate URL" placeholder="https://..." value={value || ''} onChangeText={onChange}
-            keyboardType="url" autoCapitalize="none"
-            leftIcon={<Link color={Colors.textMuted} size={17} strokeWidth={2} />} />
-        )} />
+          <Field
+            label="Credential ID"
+            value={form.credential_id}
+            onChange={set('credential_id')}
+            placeholder="e.g. ABC-123456-XYZW"
+            icon={<Hash color="#94A3B8" size={16} strokeWidth={2} />}
+            hint="Usually found on your certificate"
+          />
 
-        <View style={{ marginTop: Spacing[4] }}>
-          <Button onPress={handleSubmit(onSubmit)} label="Save Certificate" loading={saving} size="lg" />
+          <Field
+            label="Certificate URL"
+            value={form.certificate_url}
+            onChange={set('certificate_url')}
+            placeholder="https://verify.example.com/cert/..."
+            keyboardType="url"
+            icon={<Link2 color="#94A3B8" size={16} strokeWidth={2} />}
+            error={errors.certificate_url}
+            hint="Link to verify or view your certificate"
+          />
         </View>
 
-        <View style={{ height: 40 }} />
+        {/* Save */}
+        <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
+          {saving ? (
+            <ActivityIndicator color={Palette.white} />
+          ) : (
+            <View style={s.saveBtnInner}>
+              <Check color={Palette.white} size={20} strokeWidth={2.5} />
+              <Text style={s.saveBtnText}>Save Certificate</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { ...G.screen },
-  navBar:    { ...G.rowBetween, paddingHorizontal: Space.pagePadding, paddingTop: Space.pageTop, paddingBottom: Spacing[3], backgroundColor: Colors.bgCard, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  navTitle:  { ...Typography.h5, color: Colors.textPrimary },
-  scroll:    { padding: Space.pagePadding, gap: Spacing[4] },
-  row:       { flexDirection: 'row', gap: Spacing[3] },
-  half:      { flex: 1 },
+const f = StyleSheet.create({
+  wrap:  { gap: 6, marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: '#334155' },
+  req:   { color: '#EF4444' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    backgroundColor: Palette.white,
+    paddingHorizontal: 14,
+    minHeight: 50,
+    gap: 10,
+  },
+  focused:  { borderColor: Colors.primary, backgroundColor: Colors.primaryLight + '33' },
+  err:      { borderColor: '#EF4444', backgroundColor: '#FFF1F2' },
+  icon:     { opacity: 0.7 },
+  input:    { flex: 1, fontSize: 15, color: '#0F172A', padding: 0, paddingVertical: 12 },
+  errText:  { fontSize: 12, color: '#EF4444', fontWeight: '500' },
+  hint:     { fontSize: 11, color: '#94A3B8' },
+});
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: Palette.white,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 12,
+  },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  headerText: { flex: 1 },
+  title:      { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  subtitle:   { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+
+  scroll: { padding: 20 },
+
+  card: {
+    backgroundColor: Palette.white,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    ...Platform.select({
+      ios:     { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6 },
+      android: { elevation: 1 },
+      default: { boxShadow: '0px 2px 6px rgba(15,23,42,0.04)' },
+    }),
+  },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
+  cardIconWrap: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
+
+  row:  { flexDirection: 'row', gap: 12 },
+  half: { flex: 1 },
+
+  saveBtn: {
+    height: 56,
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    ...Platform.select({
+      ios:     { shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
+      android: { elevation: 4 },
+      default: { boxShadow: '0px 4px 12px rgba(37,99,235,0.3)' },
+    }),
+  },
+  saveBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  saveBtnText:  { fontSize: 17, fontWeight: '700', color: Palette.white },
 });

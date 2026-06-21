@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "test:db": "node test-db-connection.js",
+    "db:status": "node test-db-connection.js"
+  }
+}

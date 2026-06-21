@@ -19,6 +19,8 @@ class QueryBuilder<T = any> {
   private _range: [number, number] | null = null;
   private _single = false;
   private _count: string | null = null;
+  private _hasRelations = false;
+  private _relations: Array<{ alias: string; spec: string }> = [];
 
   constructor(table: string) {
     this.table = table;
@@ -32,17 +34,50 @@ class QueryBuilder<T = any> {
 
   private parseSelect(columns: string): string {
     // Handle nested selects like "*, employer:employers(name), skills:job_seeker_skills(*, skill:skills(*))"
-    // For Neon we flatten these with JOINs - simplified version returns base columns
     if (columns === '*' || columns.trim() === '*') return '*';
-    // Strip nested relation syntax for basic compatibility
-    return columns.split(',').map(c => {
-      const trimmed = c.trim();
-      // Skip nested relations (they contain parentheses)
-      if (trimmed.includes('(')) return null;
-      // Handle aliases like "employer:employers" - just take the alias
-      const alias = trimmed.split(':')[0].trim();
-      return alias === '*' ? '*' : alias;
-    }).filter(Boolean).join(', ') || '*';
+    
+    // Split by comma, but need to handle nested parentheses correctly
+    const parts: string[] = [];
+    let current = '';
+    let depth = 0;
+    
+    for (let i = 0; i < columns.length; i++) {
+      const char = columns[i];
+      if (char === '(') depth++;
+      if (char === ')') depth--;
+      
+      if (char === ',' && depth === 0) {
+        parts.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    if (current.trim()) parts.push(current.trim());
+    
+    // Process each part
+    const baseColumns: string[] = [];
+    
+    for (const part of parts) {
+      if (part === '*') {
+        baseColumns.push('*');
+        continue;
+      }
+      
+      // Check if this is a nested relation like "job:jobs(...)"
+      if (part.includes(':') && part.includes('(')) {
+        const colonIndex = part.indexOf(':');
+        const alias = part.substring(0, colonIndex).trim();
+        this._hasRelations = true;
+        this._relations.push({ alias, spec: part });
+        // Don't add to baseColumns - handled by JOINs
+      } else {
+        // Regular column
+        baseColumns.push(part);
+      }
+    }
+    
+    return baseColumns.length > 0 ? baseColumns.join(', ') : '*';
   }
 
   insert(data: Partial<T> | Partial<T>[]) {
@@ -131,27 +166,225 @@ class QueryBuilder<T = any> {
     } else if (this._limit) {
       limit = `LIMIT ${this._limit}`;
     }
-    const text = `SELECT ${this._select} FROM ${this.table} ${where} ${order} ${limit}`.trim().replace(/\s+/g, ' ');
+    
+    // Handle common JOIN patterns
+    let joins = '';
+    let selectCols = this._select;
+    
+    if (this.table === 'jobs' && this._hasRelations) {
+      const relationMap: Record<string, string> = {};
+      
+      for (const rel of this._relations) {
+        if (rel.alias === 'employer' && rel.spec.includes('employers')) {
+          joins += ' LEFT JOIN employers ON employers.id = jobs.employer_id';
+          relationMap['employer'] = 'employers';
+        }
+        if (rel.alias === 'category' && rel.spec.includes('job_categories')) {
+          joins += ' LEFT JOIN job_categories ON job_categories.id = jobs.category_id';
+          relationMap['category'] = 'job_categories';
+        }
+        if (rel.alias === 'required_skills' && rel.spec.includes('job_skills')) {
+          // Will need aggregation - skip for now, return basic job data
+          relationMap['required_skills'] = 'skip';
+        }
+      }
+      
+      if (Object.keys(relationMap).length > 0) {
+        const baseCols = `jobs.*`;
+        const relCols = [];
+        if (relationMap['employer']) {
+          relCols.push(
+            'employers.id as "employer.id"',
+            'employers.company_name as "employer.company_name"',
+            'employers.company_logo_url as "employer.company_logo_url"',
+            'employers.industry as "employer.industry"',
+            'employers.website as "employer.website"'
+          );
+        }
+        if (relationMap['category']) {
+          relCols.push('job_categories.name as "category.name"');
+        }
+        selectCols = [baseCols, ...relCols].join(', ');
+      }
+    }
+    
+    if (this.table === 'job_matches' && this._hasRelations) {
+      for (const rel of this._relations) {
+        if (rel.alias === 'job' && rel.spec.includes('jobs')) {
+          joins += ' LEFT JOIN jobs ON jobs.id = job_matches.job_id';
+          joins += ' LEFT JOIN employers ON employers.id = jobs.employer_id';
+          joins += ' LEFT JOIN job_categories ON job_categories.id = jobs.category_id';
+          
+          selectCols = [
+            'job_matches.match_score',
+            'job_matches.skills_match',
+            'job_matches.location_match',
+            'job_matches.experience_match',
+            'jobs.id as "job.id"',
+            'jobs.title as "job.title"',
+            'jobs.description as "job.description"',
+            'jobs.employment_type as "job.employment_type"',
+            'jobs.location as "job.location"',
+            'jobs.city as "job.city"',
+            'jobs.salary_min as "job.salary_min"',
+            'jobs.salary_max as "job.salary_max"',
+            'jobs.salary_currency as "job.salary_currency"',
+            'jobs.is_remote as "job.is_remote"',
+            'jobs.status as "job.status"',
+            'jobs.created_at as "job.created_at"',
+            'employers.company_name as "job.employer.company_name"',
+            'employers.company_logo_url as "job.employer.company_logo_url"',
+            'job_categories.name as "job.category.name"',
+          ].join(', ');
+        }
+      }
+    }
+    
+    if (this.table === 'saved_jobs' && this._hasRelations) {
+      for (const rel of this._relations) {
+        if (rel.alias === 'job' && rel.spec.includes('jobs')) {
+          joins += ' LEFT JOIN jobs ON jobs.id = saved_jobs.job_id';
+          joins += ' LEFT JOIN employers ON employers.id = jobs.employer_id';
+          
+          selectCols = [
+            'saved_jobs.id',
+            'saved_jobs.created_at',
+            'jobs.id as "job.id"',
+            'jobs.title as "job.title"',
+            'jobs.city as "job.city"',
+            'jobs.country as "job.country"',
+            'jobs.is_remote as "job.is_remote"',
+            'jobs.employment_type as "job.employment_type"',
+            'jobs.salary_min as "job.salary_min"',
+            'jobs.salary_max as "job.salary_max"',
+            'jobs.salary_currency as "job.salary_currency"',
+            'employers.company_name as "job.employer.company_name"',
+            'employers.company_logo_url as "job.employer.company_logo_url"',
+          ].join(', ');
+        }
+      }
+    }
+    
+    if (this.table === 'applications' && this._hasRelations) {
+      for (const rel of this._relations) {
+        if (rel.alias === 'job' && rel.spec.includes('jobs')) {
+          joins += ' LEFT JOIN jobs ON jobs.id = applications.job_id';
+          joins += ' LEFT JOIN employers ON employers.id = jobs.employer_id';
+          joins += ' LEFT JOIN job_categories ON job_categories.id = jobs.category_id';
+          
+          selectCols = [
+            'applications.*',
+            'jobs.id as "job.id"',
+            'jobs.title as "job.title"',
+            'jobs.city as "job.city"',
+            'jobs.employment_type as "job.employment_type"',
+            'jobs.salary_min as "job.salary_min"',
+            'jobs.salary_max as "job.salary_max"',
+            'jobs.salary_currency as "job.salary_currency"',
+            'employers.company_name as "job.employer.company_name"',
+            'employers.company_logo_url as "job.employer.company_logo_url"',
+            'job_categories.name as "job.category.name"',
+          ].join(', ');
+        }
+        if (rel.alias === 'job_seeker' && rel.spec.includes('job_seekers')) {
+          joins += ' LEFT JOIN job_seekers ON job_seekers.id = applications.job_seeker_id';
+          // Add job_seeker columns if not already added job columns
+          if (!selectCols.includes('applications.*')) {
+            selectCols = 'applications.*';
+          }
+          const jsColumns = [
+            'job_seekers.id as "job_seeker.id"',
+            'job_seekers.full_name as "job_seeker.full_name"',
+            'job_seekers.profile_photo_url as "job_seeker.profile_photo_url"',
+            'job_seekers.current_occupation as "job_seeker.current_occupation"',
+            'job_seekers.years_of_experience as "job_seeker.years_of_experience"',
+            'job_seekers.city as "job_seeker.city"',
+          ];
+          if (selectCols === 'applications.*') {
+            selectCols = ['applications.*', ...jsColumns].join(', ');
+          } else {
+            selectCols = [selectCols, ...jsColumns].join(', ');
+          }
+        }
+      }
+    }
+    
+    if (this.table === 'job_seeker_skills' && this._hasRelations) {
+      for (const rel of this._relations) {
+        if (rel.alias === 'skill' && rel.spec.includes('skills')) {
+          joins += ' LEFT JOIN skills ON skills.id = job_seeker_skills.skill_id';
+          selectCols = [
+            'job_seeker_skills.*',
+            'skills.id as "skill.id"',
+            'skills.name as "skill.name"',
+            'skills.category as "skill.category"',
+          ].join(', ');
+        }
+      }
+    }
+    
+    const text = `SELECT ${selectCols} FROM ${this.table}${joins} ${where} ${order} ${limit}`.trim().replace(/\s+/g, ' ');
     return { text, values: this._values };
   }
 
   async execute(): Promise<{ data: T | T[] | null; error: any; count?: number }> {
     try {
       const { text, values } = this.buildQuery();
-      const rows = await sql(text as any, ...values);
+      
+      // Import the raw neon client
+      const { neon } = await import('@neondatabase/serverless');
+      const sqlClient = neon(process.env.EXPO_PUBLIC_NEON_DATABASE_URL || '');
+      
+      // Execute the query
+      let rows: any;
+      
+      if (values.length === 0) {
+        rows = await sqlClient(text);
+      } else {
+        rows = await sqlClient(text, values);
+      }
+
+      // Ensure rows is always an array
+      if (!rows) {
+        rows = [];
+      } else if (!Array.isArray(rows)) {
+        rows = [rows];
+      }
+
+      // Transform flat rows with dotted keys into nested objects
+      const transformedRows = rows.map((row: any) => {
+        const obj: any = {};
+        for (const [key, value] of Object.entries(row)) {
+          if (key.includes('.')) {
+            // Handle nested keys like "job.employer.company_name"
+            const parts = key.split('.');
+            let current = obj;
+            for (let i = 0; i < parts.length - 1; i++) {
+              if (!current[parts[i]]) current[parts[i]] = {};
+              current = current[parts[i]];
+            }
+            current[parts[parts.length - 1]] = value;
+          } else {
+            obj[key] = value;
+          }
+        }
+        return obj;
+      });
 
       if (this._count === 'exact') {
         const countQuery = `SELECT COUNT(*) as count FROM ${this.table} ${this._filters.length > 0 ? `WHERE ${this._filters.join(' AND ')}` : ''}`;
-        const countRows = await sql(countQuery as any, ...this._values);
-        const count = parseInt((countRows[0] as any).count, 10);
-        return { data: this._single ? (rows[0] ?? null) : rows as T[], error: null, count };
+        const countRows: any = await sqlClient(countQuery, this._values.length > 0 ? this._values : undefined);
+        const countArray = Array.isArray(countRows) ? countRows : [countRows];
+        const count = parseInt(countArray[0]?.count || '0', 10);
+        return { data: this._single ? (transformedRows[0] ?? null) : transformedRows as T[], error: null, count };
       }
 
       if (this._single) {
-        return { data: (rows[0] as T) ?? null, error: null };
+        return { data: (transformedRows[0] as T) ?? null, error: null };
       }
-      return { data: rows as T[], error: null };
+      return { data: transformedRows as T[], error: null };
     } catch (err: any) {
+      console.error('Query error:', err);
       return { data: null, error: err };
     }
   }

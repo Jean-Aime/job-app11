@@ -1,233 +1,262 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  ActivityIndicator, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MapPin, Briefcase, Navigation, List, Map as MapIcon, ChevronRight } from 'lucide-react-native';
+import {
+  MapPin, Briefcase, Navigation, List, Map as MapIcon, ChevronRight,
+} from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { Job } from '@/types/database';
-import {
-  Colors, Typography, Spacing, Radius, Space, G, Palette,
-} from '@/constants/theme';
+import { Colors, Space, Palette } from '@/constants/theme';
 
 const DISTANCES = ['5', '10', '20', '50'];
 
 export default function MapScreen() {
   const router  = useRouter();
   const [distance, setDistance] = useState('10');
-  const [viewMode, setViewMode] = useState<'list'|'map'>('list');
+  const [view,     setView]     = useState<'list' | 'map'>('list');
   const [jobs,     setJobs]     = useState<Job[]>([]);
   const [loading,  setLoading]  = useState(true);
 
-  useEffect(() => { fetchJobs(); }, [distance]);
-
-  const fetchJobs = async () => {
+  useEffect(() => {
     setLoading(true);
-    const { data } = await supabase
+    supabase
       .from('jobs')
       .select('*, employer:employers(company_name), category:job_categories(name)')
       .eq('status', 'active')
-      .limit(20);
-    if (data) setJobs(data);
-    setLoading(false);
-  };
+      .limit(20)
+      .then(({ data }) => {
+        if (data) setJobs(data);
+        setLoading(false);
+      });
+  }, [distance]);
+
+  const renderJob = ({ item }: { item: Job & any }) => (
+    <TouchableOpacity
+      style={s.card}
+      onPress={() => router.push(`/(job-seeker)/jobs/${item.id}` as any)}
+      activeOpacity={0.88}
+    >
+      {/* Distance pill */}
+      <View style={s.distPill}>
+        <Navigation color={Colors.primary} size={10} strokeWidth={2.5} />
+        <Text style={s.distPillText}>{Math.floor(Math.random() * parseInt(distance) + 1)} km</Text>
+      </View>
+
+      <View style={s.cardInner}>
+        {/* Icon */}
+        <View style={s.iconBox}>
+          <Briefcase color={Colors.primary} size={18} strokeWidth={2} />
+        </View>
+
+        {/* Info */}
+        <View style={s.info}>
+          <Text style={s.title} numberOfLines={1}>{item.title}</Text>
+          <Text style={s.company} numberOfLines={1}>{item.employer?.company_name}</Text>
+          <View style={s.meta}>
+            <MapPin color="#94A3B8" size={10} strokeWidth={2.5} />
+            <Text style={s.metaText}>{item.city || 'Remote'}</Text>
+            <View style={s.dot} />
+            <Briefcase color="#94A3B8" size={10} strokeWidth={2.5} />
+            <Text style={s.metaText}>{item.employment_type?.replace(/_/g, ' ')}</Text>
+          </View>
+        </View>
+
+        <ChevronRight color="#CBD5E1" size={16} strokeWidth={2} />
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={s.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={s.header}>
         <View>
-          <Text style={styles.heading}>Nearby Jobs</Text>
-          <View style={styles.locationRow}>
-            <MapPin color={Colors.primary} size={13} strokeWidth={2.5} />
-            <Text style={styles.locationText}>Kigali, Rwanda</Text>
+          <Text style={s.heading}>Nearby Jobs</Text>
+          <View style={s.locRow}>
+            <MapPin color={Colors.primary} size={12} strokeWidth={2.5} />
+            <Text style={s.locText}>Kigali, Rwanda</Text>
           </View>
         </View>
       </View>
 
       {/* Distance filter */}
-      <View style={styles.filterRow}>
-        <Text style={styles.filterLabel}>Within</Text>
-        <View style={styles.filterChips}>
-          {DISTANCES.map(d => (
-            <TouchableOpacity
-              key={d}
-              style={[styles.distChip, distance === d && styles.distChipActive]}
-              onPress={() => setDistance(d)}
-            >
-              <Text style={[styles.distText, distance === d && styles.distTextActive]}>{d} km</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      <View style={s.distRow}>
+        <Text style={s.distLabel}>Within</Text>
+        {DISTANCES.map(d => (
+          <TouchableOpacity
+            key={d}
+            style={[s.distChip, distance === d && s.distChipOn]}
+            onPress={() => setDistance(d)}
+          >
+            <Text style={[s.distText, distance === d && s.distTextOn]}>{d} km</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* View toggle */}
-      <View style={styles.toggleRow}>
-        {([['list', List, 'List View'], ['map', MapIcon, 'Map View']] as const).map(([mode, Icon, label]) => (
+      <View style={s.toggle}>
+        {([['list', List, 'List'], ['map', MapIcon, 'Map']] as const).map(([mode, Icon, label]) => (
           <TouchableOpacity
             key={mode}
-            style={[styles.toggleBtn, viewMode === mode && styles.toggleBtnActive]}
-            onPress={() => setViewMode(mode)}
+            style={[s.toggleBtn, view === mode && s.toggleBtnOn]}
+            onPress={() => setView(mode)}
           >
-            <Icon color={viewMode === mode ? Colors.primary : Colors.textMuted} size={16} strokeWidth={2} />
-            <Text style={[styles.toggleText, viewMode === mode && styles.toggleTextActive]}>{label}</Text>
+            <Icon color={view === mode ? Colors.primary : '#94A3B8'} size={15} strokeWidth={2} />
+            <Text style={[s.toggleText, view === mode && s.toggleTextOn]}>{label} View</Text>
           </TouchableOpacity>
         ))}
       </View>
 
       {/* Content */}
-      {viewMode === 'map' ? (
-        <View style={styles.mapPlaceholder}>
-          <View style={styles.mapPin}>
-            <Navigation color={Colors.primary} size={28} strokeWidth={2} />
+      {view === 'map' ? (
+        <View style={s.mapPlaceholder}>
+          <View style={s.mapPinWrap}>
+            <Navigation color={Colors.primary} size={32} strokeWidth={2} />
           </View>
-          <Text style={styles.mapTitle}>Map Integration</Text>
-          <Text style={styles.mapBody}>
-            Requires a Google Maps API key.{'\n'}
-            {loading ? '...' : `${jobs.length} jobs within ${distance} km`}
+          <Text style={s.mapTitle}>Map View</Text>
+          <Text style={s.mapBody}>
+            Requires Google Maps API key.{'\n'}
+            {jobs.length} jobs within {distance} km of Kigali.
           </Text>
+          <TouchableOpacity style={s.switchBtn} onPress={() => setView('list')}>
+            <List color={Colors.primary} size={15} strokeWidth={2} />
+            <Text style={s.switchBtnText}>Switch to List View</Text>
+          </TouchableOpacity>
         </View>
       ) : loading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator color={Colors.primary} />
+        <View style={s.loadingWrap}>
+          <ActivityIndicator color={Colors.primary} size="large" />
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-          <Text style={styles.resultCount}>{jobs.length} jobs nearby</Text>
-          {jobs.map(job => (
-            <TouchableOpacity
-              key={job.id}
-              style={styles.card}
-              onPress={() => router.push(`/(job-seeker)/jobs/${job.id}` as any)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.distBadge}>
-                <Navigation color={Colors.primary} size={11} strokeWidth={2} />
-                <Text style={styles.distBadgeText}>{Math.floor(Math.random() * parseInt(distance))} km</Text>
-              </View>
-
-              <View style={styles.cardInner}>
-                <View style={styles.cardIcon}>
-                  <Briefcase color={Colors.primary} size={18} strokeWidth={2} />
-                </View>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>{job.title}</Text>
-                  <Text style={styles.cardCompany}>{(job as any).employer?.company_name}</Text>
-                  <View style={styles.cardMeta}>
-                    <MapPin color={Colors.textMuted} size={11} strokeWidth={2} />
-                    <Text style={styles.cardMetaText}>{job.city || 'Remote'}</Text>
-                    <View style={styles.metaDot} />
-                    <Briefcase color={Colors.textMuted} size={11} strokeWidth={2} />
-                    <Text style={styles.cardMetaText}>{job.employment_type?.replace(/_/g, ' ')}</Text>
-                  </View>
-                </View>
-                <ChevronRight color={Colors.textMuted} size={18} strokeWidth={2} />
-              </View>
-            </TouchableOpacity>
-          ))}
-          <View style={G.listBottom} />
-        </ScrollView>
+        <FlatList
+          data={jobs}
+          renderItem={renderJob}
+          keyExtractor={i => i.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={s.list}
+          ListHeaderComponent={
+            <Text style={s.resultCount}>{jobs.length} jobs within {distance} km</Text>
+          }
+          ListFooterComponent={<View style={{ height: Space.tabBarHeight + 24 }} />}
+        />
       )}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { ...G.screen },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
 
-  header: {
-    paddingHorizontal: Space.pagePadding,
-    paddingTop: Space.pageTop,
-    paddingBottom: Spacing[3],
-  },
-  heading:      { ...Typography.h2, color: Colors.textPrimary },
-  locationRow:  { flexDirection: 'row', alignItems: 'center', gap: Spacing[1], marginTop: Spacing[1] },
-  locationText: { ...Typography.label, color: Colors.primary, fontWeight: '600' },
+  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 },
+  heading: { fontSize: 26, fontWeight: '800', color: '#0F172A', letterSpacing: -0.4 },
+  locRow:  { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  locText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
 
-  filterRow: {
+  distRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing[3],
-    paddingHorizontal: Space.pagePadding,
-    paddingBottom: Spacing[3],
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    gap: 8,
   },
-  filterLabel: { ...Typography.label, color: Colors.textSecondary },
-  filterChips: { flexDirection: 'row', gap: Spacing[2] },
+  distLabel: { fontSize: 13, color: '#94A3B8', fontWeight: '500', marginRight: 4 },
   distChip: {
-    paddingHorizontal: Spacing[3.5], paddingVertical: Spacing[1.5],
-    borderRadius: Radius.full,
-    backgroundColor: Colors.bgCard,
-    borderWidth: 1.5, borderColor: Colors.border,
+    paddingHorizontal: 14, paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: Palette.white,
+    borderWidth: 1.5, borderColor: '#E2E8F0',
   },
-  distChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  distText:       { ...Typography.label, color: Colors.textSecondary },
-  distTextActive: { color: Palette.white },
+  distChipOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  distText:   { fontSize: 13, color: '#64748B', fontWeight: '600' },
+  distTextOn: { color: Palette.white },
 
-  toggleRow: {
+  toggle: {
     flexDirection: 'row',
-    marginHorizontal: Space.pagePadding,
-    marginBottom: Spacing[3],
-    backgroundColor: Colors.bgCard,
-    borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: Spacing[1],
-    gap: Spacing[1],
+    marginHorizontal: 20,
+    marginBottom: 14,
+    backgroundColor: Palette.white,
+    borderRadius: 12,
+    borderWidth: 1, borderColor: '#E2E8F0',
+    padding: 4,
+    gap: 4,
   },
   toggleBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: Spacing[1.5], paddingVertical: Spacing[2], borderRadius: Radius.md,
+    gap: 6, paddingVertical: 9, borderRadius: 9,
   },
-  toggleBtnActive: { backgroundColor: Colors.primaryLight },
-  toggleText:       { ...Typography.label, color: Colors.textMuted },
-  toggleTextActive: { color: Colors.primary, fontWeight: '600' },
+  toggleBtnOn: { backgroundColor: Colors.primaryLight },
+  toggleText:   { fontSize: 13, color: '#94A3B8', fontWeight: '600' },
+  toggleTextOn: { color: Colors.primary },
 
+  // Map placeholder
   mapPlaceholder: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
-    marginHorizontal: Space.pagePadding,
-    backgroundColor: Colors.bg,
-    borderRadius: Radius.xl,
-    borderWidth: 1, borderColor: Colors.border,
-    gap: Spacing[3],
+    marginHorizontal: 20, gap: 14,
+    backgroundColor: Palette.white,
+    borderRadius: 20,
+    borderWidth: 1.5, borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    paddingHorizontal: 32,
   },
-  mapPin: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: Colors.bgCard,
+  mapPinWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: Colors.primaryLight,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: Colors.border,
   },
-  mapTitle: { ...Typography.h4, color: Colors.textPrimary },
-  mapBody:  { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', lineHeight: 24 },
+  mapTitle: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
+  mapBody:  { fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 22 },
+  switchBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: Colors.primaryLight, borderRadius: 10,
+  },
+  switchBtnText: { fontSize: 14, color: Colors.primary, fontWeight: '600' },
 
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  list:        { paddingHorizontal: Space.pagePadding },
-  resultCount: { ...Typography.bodySm, color: Colors.textSecondary, marginBottom: Spacing[3] },
+  list:        { paddingHorizontal: 20 },
+  resultCount: { fontSize: 13, color: '#94A3B8', fontWeight: '500', marginBottom: 12 },
 
   card: {
-    backgroundColor: Colors.bgCard,
-    borderRadius: Radius.lg,
-    marginBottom: Space.cardGap,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Palette.white,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     overflow: 'hidden',
+    ...Platform.select({
+      ios:     { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6 },
+      android: { elevation: 2 },
+      default: { boxShadow: '0px 2px 6px rgba(15,23,42,0.05)' },
+    }),
   },
-  distBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing[1],
+  distPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
     alignSelf: 'flex-end',
-    marginTop: Spacing[2], marginRight: Spacing[3],
+    marginTop: 10, marginRight: 12,
     backgroundColor: Colors.primaryLight,
-    paddingHorizontal: Spacing[2.5], paddingVertical: Spacing[0.5],
-    borderRadius: Radius.full,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 20,
   },
-  distBadgeText: { ...Typography.caption, color: Colors.primary, fontWeight: '600' },
-
-  cardInner:    { flexDirection: 'row', alignItems: 'center', padding: Space.cardPadding, paddingTop: Spacing[2], gap: Spacing[3] },
-  cardIcon:     { ...G.iconMd, backgroundColor: Colors.primaryLight },
-  cardInfo:     { flex: 1 },
-  cardTitle:    { ...Typography.h5, color: Colors.textPrimary, marginBottom: 2 },
-  cardCompany:  { ...Typography.bodySm, color: Colors.textSecondary, marginBottom: Spacing[1.5] },
-  cardMeta:     { flexDirection: 'row', alignItems: 'center', gap: Spacing[1.5], flexWrap: 'wrap' },
-  cardMetaText: { ...Typography.caption, color: Colors.textMuted },
-  metaDot:      { width: 3, height: 3, borderRadius: 2, backgroundColor: Colors.textMuted },
+  distPillText: { fontSize: 11, color: Colors.primary, fontWeight: '600' },
+  cardInner: {
+    flexDirection: 'row', alignItems: 'center',
+    padding: 12, paddingTop: 4,
+    gap: 12,
+  },
+  iconBox: {
+    width: 42, height: 42, borderRadius: 10,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  info:    { flex: 1 },
+  title:   { fontSize: 15, fontWeight: '600', color: '#0F172A', marginBottom: 2 },
+  company: { fontSize: 13, color: '#64748B', marginBottom: 5 },
+  meta:    { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
+  metaText:{ fontSize: 11, color: '#94A3B8' },
+  dot:     { width: 3, height: 3, borderRadius: 2, backgroundColor: '#CBD5E1' },
 });
