@@ -12,7 +12,7 @@ import { Colors, Typography, Spacing, Radius, Palette } from '@/constants/theme'
 
 const { width } = Dimensions.get('window');
 
-type Role = 'job_seeker' | 'employer';
+type Role = 'job_seeker' | 'employer' | 'service_provider';
 
 const ROLES = [
   {
@@ -32,6 +32,15 @@ const ROLES = [
     features: ['Post unlimited jobs', 'Smart candidate matching', 'Manage applications'],
     gradient: ['#065F46', '#047857', '#059669'] as [string, string, string],
     cta: 'Register Company',
+  },
+  {
+    role: 'service_provider' as Role,
+    icon: User,
+    title: 'Service Provider',
+    subtitle: 'Offer your services',
+    features: ['Get local job requests', 'Set your own rates', 'Build your reputation'],
+    gradient: ['#047857', '#059669', '#10b981'] as [string, string, string],
+    cta: 'Become a Provider',
   },
 ];
 

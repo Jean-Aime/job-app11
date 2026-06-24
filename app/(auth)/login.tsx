@@ -176,9 +176,10 @@ export default function LoginScreen() {
       Alert.alert('Sign In Failed', error.message || 'Invalid credentials. Please try again.');
       return;
     }
-    if (user?.role === 'admin')         router.replace('/(admin)');
-    else if (user?.role === 'employer') router.replace('/(employer)');
-    else                                router.replace('/(job-seeker)');
+    if (user?.role === 'admin')              router.replace('/(admin)');
+    else if (user?.role === 'employer')      router.replace('/(employer)');
+    else if (user?.role === 'service_provider') router.replace('/(service-provider)');
+    else                                     router.replace('/(job-seeker)');
   };
 
   const onBtnPressIn  = () => Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 30 }).start();

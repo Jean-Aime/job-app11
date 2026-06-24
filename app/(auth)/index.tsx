@@ -43,8 +43,9 @@ export default function WelcomeScreen() {
   }, [isAuthenticated, user]);
 
   const redirectByRole = (role: string) => {
-    if (role === 'admin')       router.replace('/(admin)');
+    if (role === 'admin')         router.replace('/(admin)');
     else if (role === 'employer') router.replace('/(employer)');
+    else if (role === 'service_provider') router.replace('/(service-provider)');
     else router.replace('/(job-seeker)');
   };
 

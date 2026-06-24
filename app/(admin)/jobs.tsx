@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Briefcase, MapPin, Eye, Trash2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { Job } from '@/types/database';
@@ -49,11 +50,17 @@ export default function AdminJobsScreen() {
     ]);
   };
 
+  const router = useRouter();
+
   const renderItem = ({ item }: { item: any }) => {
     const sc = JobStatusConfig[item.status] || JobStatusConfig.draft;
     return (
       <View style={styles.card}>
-        <View style={styles.cardInner}>
+        <TouchableOpacity
+          style={styles.cardInner}
+          onPress={() => router.push(`/(admin)/jobs/${item.id}` as any)}
+          activeOpacity={0.7}
+        >
           <View style={styles.logo}>
             {item.employer?.company_logo_url
               ? <Image source={{ uri: item.employer.company_logo_url }} style={styles.logoImg} />
@@ -71,7 +78,7 @@ export default function AdminJobsScreen() {
             </View>
           </View>
           <Badge label={sc.label} color={sc.color} bg={sc.bg} dot size="sm" />
-        </View>
+        </TouchableOpacity>
         <View style={styles.cardFooter}>
           <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteJob(item.id)}>
             <Trash2 color={Colors.error} size={16} strokeWidth={2} />

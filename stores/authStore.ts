@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, JobSeeker, Employer } from '@/types/database';
+import { User, JobSeeker, Employer, ServiceProvider } from '@/types/database';
 import { queryOne } from '@/lib/db';
 import {
   signUp as authSignUp,
@@ -17,6 +17,7 @@ interface AuthState {
   user: User | null;
   jobSeeker: JobSeeker | null;
   employer: Employer | null;
+  serviceProvider: ServiceProvider | null;
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -24,16 +25,18 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setJobSeeker: (jobSeeker: JobSeeker | null) => void;
   setEmployer: (employer: Employer | null) => void;
+  setServiceProvider: (serviceProvider: ServiceProvider | null) => void;
   setSession: (session: Session | null) => void;
   setLoading: (loading: boolean) => void;
 
-  signUp: (email: string, password: string, role: 'job_seeker' | 'employer') => Promise<{ error: any }>;
+  signUp: (email: string, password: string, role: 'job_seeker' | 'employer' | 'service_provider') => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any; user: User | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
 
   fetchJobSeekerProfile: () => Promise<void>;
   fetchEmployerProfile: () => Promise<void>;
+  fetchServiceProviderProfile: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -43,6 +46,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       jobSeeker: null,
       employer: null,
+      serviceProvider: null,
       session: null,
       isLoading: true,
       isAuthenticated: false,
@@ -50,6 +54,7 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setJobSeeker: (jobSeeker) => set({ jobSeeker }),
       setEmployer: (employer) => set({ employer }),
+      setServiceProvider: (serviceProvider) => set({ serviceProvider }),
       setSession: (session) => set({ session }),
       setLoading: (isLoading) => set({ isLoading }),
 
@@ -59,7 +64,8 @@ export const useAuthStore = create<AuthState>()(
         if (user && session) {
           set({ user, session, isAuthenticated: true });
           if (role === 'job_seeker') await get().fetchJobSeekerProfile();
-          else await get().fetchEmployerProfile();
+          else if (role === 'employer') await get().fetchEmployerProfile();
+          else if (role === 'service_provider') await get().fetchServiceProviderProfile();
         }
         return { error: null };
       },
@@ -74,6 +80,8 @@ export const useAuthStore = create<AuthState>()(
             await get().fetchJobSeekerProfile();
           } else if (user.role === 'employer') {
             await get().fetchEmployerProfile();
+          } else if (user.role === 'service_provider') {
+            await get().fetchServiceProviderProfile();
           }
           // admin role: no extra profile table needed
         }
@@ -86,6 +94,7 @@ export const useAuthStore = create<AuthState>()(
           user: null,
           jobSeeker: null,
           employer: null,
+          serviceProvider: null,
           session: null,
           isAuthenticated: false,
         });
@@ -140,6 +149,19 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      fetchServiceProviderProfile: async () => {
+        const { user } = get();
+        if (!user) return;
+        try {
+          const data = await queryOne<ServiceProvider>`
+            SELECT * FROM service_providers WHERE user_id = ${user.id}
+          `;
+          if (data) set({ serviceProvider: data });
+        } catch (err) {
+          console.error('fetchServiceProviderProfile error:', err);
+        }
+      },
+
       refreshUser: async () => {
         try {
           const session = await getStoredSession();
@@ -155,6 +177,8 @@ export const useAuthStore = create<AuthState>()(
               await get().fetchJobSeekerProfile();
             } else if (user.role === 'employer') {
               await get().fetchEmployerProfile();
+            } else if (user.role === 'service_provider') {
+              await get().fetchServiceProviderProfile();
             }
           } else {
             set({ isAuthenticated: false, user: null, session: null });

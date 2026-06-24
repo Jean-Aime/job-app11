@@ -127,6 +127,7 @@ export const Colors = {
   success:      Palette.green600,
   successLight: Palette.green50,
   successMid:   Palette.green100,
+  successDark:  Palette.green700,
   warning:      Palette.amber500,
   warningLight: Palette.amber50,
   warningMid:   Palette.amber100,

@@ -42,6 +42,7 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(job-seeker)" />
         <Stack.Screen name="(employer)" />
+        <Stack.Screen name="(service-provider)" />
         <Stack.Screen name="(admin)" />
         <Stack.Screen name="+not-found" />
       </Stack>

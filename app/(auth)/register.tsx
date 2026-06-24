@@ -34,9 +34,10 @@ const PASSWORD_RULES = [
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ role: 'job_seeker' | 'employer' }>();
+  const params = useLocalSearchParams<{ role: 'job_seeker' | 'employer' | 'service_provider' }>();
   const role = params.role || 'job_seeker';
   const isEmployer = role === 'employer';
+  const isServiceProvider = role === 'service_provider';
   const [submitting, setSubmitting] = useState(false);
   const [watchedPw, setWatchedPw] = useState('');
   const { signUp } = useAuthStore();
@@ -54,7 +55,11 @@ export default function RegisterScreen() {
       Alert.alert('Registration Failed', error.message || 'Please try again.');
       return;
     }
-    router.replace(isEmployer ? '/(employer)' : '/(job-seeker)');
+    router.replace(
+      isEmployer ? '/(employer)' : 
+      isServiceProvider ? '/(service-provider)' : 
+      '/(job-seeker)'
+    );
   };
 
   return (
@@ -70,13 +75,25 @@ export default function RegisterScreen() {
 
           {/* Role badge */}
           <View style={styles.rolePill}>
-            <View style={[styles.roleIcon, { backgroundColor: isEmployer ? Colors.employerLight : Colors.primaryLight }]}>
-              {isEmployer
-                ? <Building2 color={Colors.employer} size={16} strokeWidth={2} />
-                : <User color={Colors.primary} size={16} strokeWidth={2} />}
+            <View style={[styles.roleIcon, { 
+              backgroundColor: isEmployer ? Colors.employerLight : 
+                              isServiceProvider ? Colors.successLight : 
+                              Colors.primaryLight 
+            }]}>
+              {isEmployer ? (
+                <Building2 color={Colors.employer} size={16} strokeWidth={2} />
+              ) : (
+                <User color={isServiceProvider ? Colors.success : Colors.primary} size={16} strokeWidth={2} />
+              )}
             </View>
-            <Text style={[styles.roleLabel, { color: isEmployer ? Colors.employer : Colors.primary }]}>
-              {isEmployer ? 'Employer Account' : 'Job Seeker Account'}
+            <Text style={[styles.roleLabel, { 
+              color: isEmployer ? Colors.employer : 
+                     isServiceProvider ? Colors.success : 
+                     Colors.primary 
+            }]}>
+              {isEmployer ? 'Employer Account' : 
+               isServiceProvider ? 'Service Provider Account' : 
+               'Job Seeker Account'}
             </Text>
           </View>
 
@@ -86,6 +103,8 @@ export default function RegisterScreen() {
             <Text style={styles.subheading}>
               {isEmployer
                 ? 'Register your company and start hiring top talent'
+                : isServiceProvider
+                ? 'Offer your services and connect with local customers'
                 : 'Join thousands finding their dream jobs in Africa'}
             </Text>
           </View>
@@ -187,9 +206,11 @@ export default function RegisterScreen() {
 
             <Button
               onPress={handleSubmit(onSubmit)}
-              label={isEmployer ? 'Create Company Account' : 'Create Account'}
+              label={isEmployer ? 'Create Company Account' : 
+                     isServiceProvider ? 'Create Provider Account' : 
+                     'Create Account'}
               loading={submitting}
-              variant={isEmployer ? 'employer' : 'primary'}
+              variant={isEmployer ? 'employer' : isServiceProvider ? 'success' : 'primary'}
               size="lg"
             />
           </View>
