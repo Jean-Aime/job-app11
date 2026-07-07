@@ -224,7 +224,7 @@ export default function ServiceProviderDashboard() {
               <View style={[styles.statIcon, { backgroundColor: Colors.employer }]}>
                 <Star color={Palette.white} size={20} strokeWidth={2} />
               </View>
-              <Text style={styles.statValue}>{provider.average_rating.toFixed(1)}</Text>
+              <Text style={styles.statValue}>{(Number(provider.average_rating) || 0).toFixed(1)}</Text>
               <Text style={styles.statLabel}>Rating</Text>
             </View>
           </View>
@@ -242,7 +242,7 @@ export default function ServiceProviderDashboard() {
             </View>
             <View style={styles.performanceStats}>
               <View style={styles.performanceStat}>
-                <Text style={styles.performanceValue}>{provider.response_rate.toFixed(0)}%</Text>
+                <Text style={styles.performanceValue}>{(Number(provider.response_rate) || 0).toFixed(0)}%</Text>
                 <Text style={styles.performanceLabel}>Response Rate</Text>
               </View>
               <View style={styles.performanceDivider} />

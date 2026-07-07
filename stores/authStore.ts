@@ -71,21 +71,35 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signIn: async (email, password) => {
-        const { user, session, error } = await authSignIn(email, password);
-        if (error) return { error: { message: error }, user: null };
-        if (user && session) {
-          set({ user, session, isAuthenticated: true });
-          // Fetch role-specific profile
-          if (user.role === 'job_seeker') {
-            await get().fetchJobSeekerProfile();
-          } else if (user.role === 'employer') {
-            await get().fetchEmployerProfile();
-          } else if (user.role === 'service_provider') {
-            await get().fetchServiceProviderProfile();
+        console.log('🔵 authStore.signIn called with:', email);
+        try {
+          const { user, session, error } = await authSignIn(email, password);
+          console.log('🔵 authSignIn result:', { user: user?.id, role: user?.role, error });
+          
+          if (error) return { error: { message: error }, user: null };
+          if (user && session) {
+            console.log('🔵 Setting user in store, role:', user.role);
+            set({ user, session, isAuthenticated: true });
+            
+            // Fetch role-specific profile
+            if (user.role === 'job_seeker') {
+              console.log('🔵 Fetching job seeker profile...');
+              await get().fetchJobSeekerProfile();
+            } else if (user.role === 'employer') {
+              console.log('🔵 Fetching employer profile...');
+              await get().fetchEmployerProfile();
+            } else if (user.role === 'service_provider') {
+              console.log('🔵 Fetching service provider profile...');
+              await get().fetchServiceProviderProfile();
+            }
+            console.log('🟢 Profile fetch complete');
+            // admin role: no extra profile table needed
           }
-          // admin role: no extra profile table needed
+          return { error: null, user: user ?? null };
+        } catch (err: any) {
+          console.error('🔴 authStore.signIn exception:', err);
+          return { error: { message: err.message || 'Sign in failed' }, user: null };
         }
-        return { error: null, user: user ?? null };
       },
 
       signOut: async () => {

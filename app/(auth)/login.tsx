@@ -168,18 +168,31 @@ export default function LoginScreen() {
   });
 
   const onSubmit = async (data: Form) => {
+    console.log('🔵 Login onSubmit triggered with:', data.email);
     setSubmitting(true);
-    const { error, user } = await signIn(data.email, data.password);
-    setSubmitting(false);
+    
+    try {
+      console.log('🔵 Calling signIn...');
+      const { error, user } = await signIn(data.email, data.password);
+      console.log('🔵 signIn result:', { error, user });
+      setSubmitting(false);
 
-    if (error) {
-      Alert.alert('Sign In Failed', error.message || 'Invalid credentials. Please try again.');
-      return;
+      if (error) {
+        console.error('🔴 Login error:', error);
+        Alert.alert('Sign In Failed', error.message || 'Invalid credentials. Please try again.');
+        return;
+      }
+      
+      console.log('🟢 Login successful, user role:', user?.role);
+      if (user?.role === 'admin')              router.replace('/(admin)');
+      else if (user?.role === 'employer')      router.replace('/(employer)');
+      else if (user?.role === 'service_provider') router.replace('/(service-provider)');
+      else                                     router.replace('/(job-seeker)');
+    } catch (err) {
+      console.error('🔴 Login exception:', err);
+      setSubmitting(false);
+      Alert.alert('Error', 'An unexpected error occurred');
     }
-    if (user?.role === 'admin')              router.replace('/(admin)');
-    else if (user?.role === 'employer')      router.replace('/(employer)');
-    else if (user?.role === 'service_provider') router.replace('/(service-provider)');
-    else                                     router.replace('/(job-seeker)');
   };
 
   const onBtnPressIn  = () => Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 30 }).start();

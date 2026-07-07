@@ -140,7 +140,7 @@ export async function clearSession(): Promise<void> {
 export async function signUp(
   email: string,
   password: string,
-  role: 'job_seeker' | 'employer'
+  role: 'job_seeker' | 'employer' | 'service_provider'
 ): Promise<{ user: User | null; session: Session | null; error: string | null }> {
   try {
     // Check if email already exists
@@ -166,10 +166,15 @@ export async function signUp(
         INSERT INTO job_seekers (user_id, full_name, years_of_experience, availability, profile_completion_score)
         VALUES (${userId}, '', 0, 'immediately', 0)
       `;
-    } else {
+    } else if (role === 'employer') {
       await execute`
         INSERT INTO employers (user_id, company_name, verification_status, is_verified)
         VALUES (${userId}, '', 'pending', false)
+      `;
+    } else if (role === 'service_provider') {
+      await execute`
+        INSERT INTO service_providers (user_id, full_name, phone, city, verification_level, is_available)
+        VALUES (${userId}, '', '', '', 1, true)
       `;
     }
 
@@ -197,17 +202,30 @@ export async function signIn(
   password: string
 ): Promise<{ user: User | null; session: Session | null; error: string | null }> {
   try {
+    console.log('🔵 lib/auth.signIn called with:', email);
+    
     const row = await queryOne<User & { password_hash: string }>`
       SELECT id, email, phone, role, is_verified, verification_status, is_active,
              created_at, updated_at, password_hash
       FROM users
       WHERE email = ${email.toLowerCase().trim()} AND is_active = true
     `;
+    
+    console.log('🔵 User query result:', row ? { id: row.id, role: row.role } : 'null');
 
-    if (!row) return { user: null, session: null, error: 'Invalid email or password' };
+    if (!row) {
+      console.warn('⚠️ User not found or inactive');
+      return { user: null, session: null, error: 'Invalid email or password' };
+    }
 
+    console.log('🔵 Verifying password...');
     const valid = await verifyPassword(password, row.password_hash);
-    if (!valid) return { user: null, session: null, error: 'Invalid email or password' };
+    console.log('🔵 Password valid:', valid);
+    
+    if (!valid) {
+      console.warn('⚠️ Invalid password');
+      return { user: null, session: null, error: 'Invalid email or password' };
+    }
 
     const user: User = {
       id: row.id, email: row.email, phone: row.phone, role: row.role,
@@ -215,14 +233,18 @@ export async function signIn(
       is_active: row.is_active, created_at: row.created_at, updated_at: row.updated_at,
     };
 
+    console.log('🔵 Creating JWT token...');
     const expiresAt = Date.now() + 7 * 24 * 3600 * 1000;
     const token = await createJWT({ userId: user.id, email: user.email, role: user.role });
     const session: Session = { token, userId: user.id, email: user.email, role: user.role, expiresAt };
+    
+    console.log('🔵 Saving session to AsyncStorage...');
     await saveSession(session);
 
+    console.log('🟢 Sign in successful!');
     return { user, session, error: null };
   } catch (err: any) {
-    console.error('signIn error:', err);
+    console.error('🔴 signIn error:', err);
     return { user: null, session: null, error: err.message || 'Sign in failed' };
   }
 }

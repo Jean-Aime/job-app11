@@ -48,18 +48,37 @@ export default function RegisterScreen() {
   });
 
   const onSubmit = async (data: Form) => {
+    console.log('🔵 Register onSubmit triggered:', { email: data.email, role });
     setSubmitting(true);
-    const { error } = await signUp(data.email, data.password, role);
-    setSubmitting(false);
-    if (error) {
-      Alert.alert('Registration Failed', error.message || 'Please try again.');
-      return;
+    
+    try {
+      console.log('🔵 Calling signUp...');
+      const { error } = await signUp(data.email, data.password, role);
+      console.log('🔵 signUp result:', { error });
+      setSubmitting(false);
+      
+      if (error) {
+        console.error('🔴 Registration error:', error);
+        Alert.alert('Registration Failed', error.message || 'Please try again.');
+        return;
+      }
+      
+      console.log('🟢 Registration successful, redirecting to:', 
+        isEmployer ? '/(employer)' : 
+        isServiceProvider ? '/(service-provider)' : 
+        '/(job-seeker)'
+      );
+      
+      router.replace(
+        isEmployer ? '/(employer)' : 
+        isServiceProvider ? '/(service-provider)' : 
+        '/(job-seeker)'
+      );
+    } catch (err) {
+      console.error('🔴 Registration exception:', err);
+      setSubmitting(false);
+      Alert.alert('Error', 'An unexpected error occurred');
     }
-    router.replace(
-      isEmployer ? '/(employer)' : 
-      isServiceProvider ? '/(service-provider)' : 
-      '/(job-seeker)'
-    );
   };
 
   return (

@@ -3,9 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { AlertTriangle, Home } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
-import {
-  Colors, Typography, Spacing, Radius, Space, G, Palette,
-} from '@/constants/theme';
+import { Colors, Typography, Spacing, Radius, G, Palette } from '@/constants/theme';
 
 export default function NotFoundScreen() {
   const router = useRouter();
