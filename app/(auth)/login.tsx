@@ -43,8 +43,9 @@ export default function LoginScreen() {
 
     if (error) {
       Alert.alert('Login Failed', error.message || 'Invalid credentials. Please try again.');
+      return;
     }
-    // Navigation is handled in auth store after successful login
+    // Route guard in _layout.tsx handles redirect based on role
   };
 
   return (
@@ -57,7 +58,7 @@ export default function LoginScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(auth)/role-selection')}
           >
             <ArrowLeft color="#1E293B" size={24} />
           </TouchableOpacity>

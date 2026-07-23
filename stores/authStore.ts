@@ -27,7 +27,7 @@ interface AuthState {
   setSession: (session: Session | null) => void;
   setLoading: (loading: boolean) => void;
 
-  signUp: (email: string, password: string, role: 'job_seeker' | 'employer') => Promise<{ error: any }>;
+  signUp: (email: string, password: string, role: 'job_seeker' | 'employer', fullName?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
@@ -44,7 +44,7 @@ export const useAuthStore = create<AuthState>()(
       jobSeeker: null,
       employer: null,
       session: null,
-      isLoading: true,
+      isLoading: false,
       isAuthenticated: false,
 
       setUser: (user) => set({ user, isAuthenticated: !!user }),
@@ -53,8 +53,10 @@ export const useAuthStore = create<AuthState>()(
       setSession: (session) => set({ session }),
       setLoading: (isLoading) => set({ isLoading }),
 
-      signUp: async (email, password, role) => {
-        const { user, session, error } = await authSignUp(email, password, role);
+      signUp: async (email, password, role, fullName) => {
+        set({ isLoading: true });
+        const { user, session, error } = await authSignUp(email, password, role, fullName);
+        set({ isLoading: false });
         if (error) return { error: { message: error } };
         if (user && session) {
           set({ user, session, isAuthenticated: true });
@@ -65,7 +67,11 @@ export const useAuthStore = create<AuthState>()(
       },
 
       signIn: async (email, password) => {
+        set({ isLoading: true });
+        console.log('[signIn] attempting:', email);
         const { user, session, error } = await authSignIn(email, password);
+        set({ isLoading: false });
+        console.log('[signIn] result:', { user: user?.email, role: user?.role, error });
         if (error) return { error: { message: error } };
         if (user && session) {
           set({ user, session, isAuthenticated: true });
@@ -77,7 +83,11 @@ export const useAuthStore = create<AuthState>()(
 
       signOut: async () => {
         await authSignOut();
-        set({ user: null, jobSeeker: null, employer: null, session: null, isAuthenticated: false });
+        set({ user: null, jobSeeker: null, employer: null, session: null, isAuthenticated: false, isLoading: false });
+        // Clear persisted storage on web (localStorage) and native (AsyncStorage)
+        try {
+          await AsyncStorage.removeItem('auth-storage');
+        } catch {}
       },
 
       resetPassword: async (email) => {
@@ -104,9 +114,9 @@ export const useAuthStore = create<AuthState>()(
                 ) FILTER (WHERE jss.id IS NOT NULL),
                 '[]'
               ) AS skills
-            FROM job_seekers js
-            LEFT JOIN job_seeker_skills jss ON jss.job_seeker_id = js.id
-            LEFT JOIN skills s ON s.id = jss.skill_id
+            FROM jl_job_seekers js
+            LEFT JOIN jl_job_seeker_skills jss ON jss.job_seeker_id = js.id
+            LEFT JOIN jl_skills s ON s.id = jss.skill_id
             WHERE js.user_id = ${user.id}
             GROUP BY js.id
           `;
@@ -121,9 +131,8 @@ export const useAuthStore = create<AuthState>()(
         if (!user) return;
         try {
           const data = await queryOne<Employer>`
-            SELECT * FROM employers WHERE user_id = ${user.id}
-          `;
-          if (data) set({ employer: data });
+            SELECT * FROM jl_employers WHERE user_id = ${user.id}
+          `;          if (data) set({ employer: data });
         } catch (err) {
           console.error('fetchEmployerProfile error:', err);
         }
@@ -133,7 +142,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           const session = await getStoredSession();
           if (!session) {
-            set({ isLoading: false, isAuthenticated: false });
+            // No valid session — clear everything
+            set({ user: null, jobSeeker: null, employer: null, session: null, isAuthenticated: false, isLoading: false });
             return;
           }
 
@@ -143,10 +153,13 @@ export const useAuthStore = create<AuthState>()(
             if (user.role === 'job_seeker') await get().fetchJobSeekerProfile();
             else if (user.role === 'employer') await get().fetchEmployerProfile();
           } else {
-            set({ isAuthenticated: false });
+            // Session exists but user not found in DB — clear everything
+            set({ user: null, jobSeeker: null, employer: null, session: null, isAuthenticated: false });
+            await authSignOut();
           }
         } catch (err) {
           console.error('refreshUser error:', err);
+          set({ user: null, jobSeeker: null, employer: null, session: null, isAuthenticated: false });
         } finally {
           set({ isLoading: false });
         }

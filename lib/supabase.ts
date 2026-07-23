@@ -1,13 +1,34 @@
 /**
  * Neon compatibility shim
  * Provides a supabase-like API surface backed by Neon PostgreSQL.
- * This lets existing screens work without rewriting every query.
+ *
+ * Uses a proven pattern: split SQL text on $1/$2/... placeholders to build
+ * a fake TemplateStringsArray, which neon() accepts for parameterized queries.
+ * This is safe (no string interpolation of user values) and works on web + native.
  */
-import { sql } from './db';
+import { neon, neonConfig } from '@neondatabase/serverless';
 import { getStoredSession } from './auth';
+
+neonConfig.fetchFunction = fetch;
+
+const databaseUrl = process.env.EXPO_PUBLIC_NEON_DATABASE_URL || '';
+const sql = neon(databaseUrl);
 
 type OrderOptions = { ascending?: boolean };
 type FilterValue = string | number | boolean | null;
+
+/**
+ * Execute a parameterized SQL query safely.
+ * Splits the text on $1, $2, ... to build a TemplateStringsArray for neon().
+ */
+async function runQuery<T = any>(text: string, values: any[]): Promise<T[]> {
+  const parts = text.split(/\$\d+/);
+  const arr: any = [...parts];
+  arr.raw = [...parts];
+  return (await sql(arr as TemplateStringsArray, ...values)) as T[];
+}
+
+// ─── QueryBuilder ─────────────────────────────────────────────────────────────
 
 class QueryBuilder<T = any> {
   private table: string;
@@ -18,7 +39,7 @@ class QueryBuilder<T = any> {
   private _limit: number | null = null;
   private _range: [number, number] | null = null;
   private _single = false;
-  private _count: string | null = null;
+  private _countOnly = false;
 
   constructor(table: string) {
     this.table = table;
@@ -26,23 +47,24 @@ class QueryBuilder<T = any> {
 
   select(columns: string = '*', opts?: { count?: string; head?: boolean }) {
     this._select = this.parseSelect(columns);
-    if (opts?.count) this._count = opts.count;
+    if (opts?.count === 'exact') this._countOnly = true;
     return this;
   }
 
   private parseSelect(columns: string): string {
-    // Handle nested selects like "*, employer:employers(name), skills:job_seeker_skills(*, skill:skills(*))"
-    // For Neon we flatten these with JOINs - simplified version returns base columns
-    if (columns === '*' || columns.trim() === '*') return '*';
-    // Strip nested relation syntax for basic compatibility
-    return columns.split(',').map(c => {
-      const trimmed = c.trim();
-      // Skip nested relations (they contain parentheses)
-      if (trimmed.includes('(')) return null;
-      // Handle aliases like "employer:employers" - just take the alias
-      const alias = trimmed.split(':')[0].trim();
-      return alias === '*' ? '*' : alias;
-    }).filter(Boolean).join(', ') || '*';
+    if (columns.trim() === '*') return '*';
+    return (
+      columns
+        .split(',')
+        .map((c) => {
+          const trimmed = c.trim();
+          if (trimmed.includes('(')) return null; // skip nested relation syntax
+          const alias = trimmed.split(':')[0].trim();
+          return alias === '*' ? '*' : alias;
+        })
+        .filter(Boolean)
+        .join(', ') || '*'
+    );
   }
 
   insert(data: Partial<T> | Partial<T>[]) {
@@ -70,14 +92,18 @@ class QueryBuilder<T = any> {
   }
 
   in(column: string, values: FilterValue[]) {
-    this._values.push(values);
-    this._filters.push(`${column} = ANY($${this._values.length})`);
+    if (!values || values.length === 0) {
+      this._filters.push('FALSE');
+      return this;
+    }
+    const placeholders = values.map((_, i) => `$${this._values.length + i + 1}`).join(', ');
+    this._values.push(...values);
+    this._filters.push(`${column} IN (${placeholders})`);
     return this;
   }
 
   or(conditions: string) {
-    // Parse "title.ilike.%val%,description.ilike.%val%"
-    const parts = conditions.split(',').map(c => {
+    const parts = conditions.split(',').map((c) => {
       const [col, op, ...valParts] = c.trim().split('.');
       const val = valParts.join('.');
       this._values.push(val);
@@ -121,41 +147,45 @@ class QueryBuilder<T = any> {
     }
   }
 
-  private buildQuery(): { text: string; values: any[] } {
-    const where = this._filters.length > 0 ? `WHERE ${this._filters.join(' AND ')}` : '';
-    const order = this._order ? `ORDER BY ${this._order}` : '';
-    let limit = '';
-    if (this._range) {
-      const count = this._range[1] - this._range[0] + 1;
-      limit = `LIMIT ${count} OFFSET ${this._range[0]}`;
-    } else if (this._limit) {
-      limit = `LIMIT ${this._limit}`;
-    }
-    const text = `SELECT ${this._select} FROM ${this.table} ${where} ${order} ${limit}`.trim().replace(/\s+/g, ' ');
-    return { text, values: this._values };
+  private buildWhere(): string {
+    return this._filters.length > 0 ? `WHERE ${this._filters.join(' AND ')}` : '';
   }
 
   async execute(): Promise<{ data: T | T[] | null; error: any; count?: number }> {
     try {
-      const { text, values } = this.buildQuery();
-      const rows = await sql(text as any, ...values);
-
-      if (this._count === 'exact') {
-        const countQuery = `SELECT COUNT(*) as count FROM ${this.table} ${this._filters.length > 0 ? `WHERE ${this._filters.join(' AND ')}` : ''}`;
-        const countRows = await sql(countQuery as any, ...this._values);
-        const count = parseInt((countRows[0] as any).count, 10);
-        return { data: this._single ? (rows[0] ?? null) : rows as T[], error: null, count };
+      if (this._countOnly) {
+        const text = `SELECT COUNT(*) as count FROM ${this.table} ${this.buildWhere()}`.trim().replace(/\s+/g, ' ');
+        const rows = await runQuery<{ count: string }>(text, this._values);
+        return { data: null, error: null, count: parseInt(rows[0]?.count ?? '0', 10) };
       }
+
+      const order = this._order ? `ORDER BY ${this._order}` : '';
+      let limitClause = '';
+      if (this._range) {
+        const count = this._range[1] - this._range[0] + 1;
+        limitClause = `LIMIT ${count} OFFSET ${this._range[0]}`;
+      } else if (this._limit) {
+        limitClause = `LIMIT ${this._limit}`;
+      }
+
+      const text = `SELECT ${this._select} FROM ${this.table} ${this.buildWhere()} ${order} ${limitClause}`
+        .trim()
+        .replace(/\s+/g, ' ');
+
+      const rows = await runQuery<T>(text, this._values);
 
       if (this._single) {
         return { data: (rows[0] as T) ?? null, error: null };
       }
       return { data: rows as T[], error: null };
     } catch (err: any) {
+      console.error('[QueryBuilder] error on', this.table, ':', err.message);
       return { data: null, error: err };
     }
   }
 }
+
+// ─── InsertBuilder ────────────────────────────────────────────────────────────
 
 class InsertBuilder<T = any> {
   private table: string;
@@ -186,31 +216,32 @@ class InsertBuilder<T = any> {
         const keys = Object.keys(row);
         const vals = Object.values(row);
         const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
-        const query = `INSERT INTO ${this.table} (${keys.join(', ')}) VALUES (${placeholders}) RETURNING *`;
-        const result = await sql(query as any, ...vals);
+        const text = `INSERT INTO ${this.table} (${keys.join(', ')}) VALUES (${placeholders}) RETURNING *`;
+        const result = await runQuery<T>(text, vals);
         lastInserted = result[0];
       }
       return { data: lastInserted as T, error: null };
     } catch (err: any) {
+      console.error('[InsertBuilder] error on', this.table, ':', err.message);
       return { data: null, error: err };
     }
   }
 }
 
+// ─── UpdateBuilder ────────────────────────────────────────────────────────────
+
 class UpdateBuilder<T = any> {
   private table: string;
-  private data: any;
+  private setClauses: string;
   private _filters: string[] = [];
-  private _values: any[] = [];
+  private _values: any[];
 
   constructor(table: string, data: any) {
     this.table = table;
-    // Pre-fill values with the update data
     const keys = Object.keys(data);
     const vals = Object.values(data);
     this._values = [...vals];
-    const setClauses = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
-    this.data = { setClauses };
+    this.setClauses = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
   }
 
   eq(column: string, value: FilterValue) {
@@ -234,14 +265,17 @@ class UpdateBuilder<T = any> {
   async execute(): Promise<{ data: T | null; error: any }> {
     try {
       const where = this._filters.length > 0 ? `WHERE ${this._filters.join(' AND ')}` : '';
-      const query = `UPDATE ${this.table} SET ${this.data.setClauses} ${where} RETURNING *`;
-      const result = await sql(query as any, ...this._values);
+      const text = `UPDATE ${this.table} SET ${this.setClauses} ${where} RETURNING *`.trim().replace(/\s+/g, ' ');
+      const result = await runQuery<T>(text, this._values);
       return { data: (result[0] as T) ?? null, error: null };
     } catch (err: any) {
+      console.error('[UpdateBuilder] error on', this.table, ':', err.message);
       return { data: null, error: err };
     }
   }
 }
+
+// ─── DeleteBuilder ────────────────────────────────────────────────────────────
 
 class DeleteBuilder<T = any> {
   private table: string;
@@ -270,42 +304,59 @@ class DeleteBuilder<T = any> {
   async execute(): Promise<{ data: null; error: any }> {
     try {
       const where = this._filters.length > 0 ? `WHERE ${this._filters.join(' AND ')}` : '';
-      const query = `DELETE FROM ${this.table} ${where}`;
-      await sql(query as any, ...this._values);
+      const text = `DELETE FROM ${this.table} ${where}`.trim().replace(/\s+/g, ' ');
+      await runQuery(text, this._values);
       return { data: null, error: null };
     } catch (err: any) {
+      console.error('[DeleteBuilder] error on', this.table, ':', err.message);
       return { data: null, error: err };
     }
   }
 }
 
+// ─── Table name map ───────────────────────────────────────────────────────────
+
+const TABLE_MAP: Record<string, string> = {
+  users: 'jl_users',
+  job_seekers: 'jl_job_seekers',
+  employers: 'jl_employers',
+  skills: 'jl_skills',
+  job_seeker_skills: 'jl_job_seeker_skills',
+  certificates: 'jl_certificates',
+  experiences: 'jl_experiences',
+  verification_documents: 'jl_verification_documents',
+  job_categories: 'jl_job_categories',
+  jobs: 'jl_jobs',
+  job_skills: 'jl_job_skills',
+  applications: 'jl_applications',
+  job_matches: 'jl_job_matches',
+  notifications: 'jl_notifications',
+  activity_logs: 'jl_activity_logs',
+  saved_jobs: 'jl_saved_jobs',
+};
+
 // ─── Supabase-compatible client shim ─────────────────────────────────────────
 
 export const supabase = {
-  from: <T = any>(table: string) => new QueryBuilder<T>(table),
+  from: <T = any>(table: string) => new QueryBuilder<T>(TABLE_MAP[table] ?? table),
 
-  // Auth shim — no-op stubs (real auth is in lib/auth.ts)
   auth: {
     getSession: async () => {
       const session = await getStoredSession();
       if (!session) return { data: { session: null }, error: null };
       return { data: { session: { user: { id: session.userId } } }, error: null };
     },
-    onAuthStateChange: (_cb: any) => {
-      // No realtime auth state with Neon — return no-op
-      return { data: { subscription: { unsubscribe: () => {} } } };
-    },
+    onAuthStateChange: (_cb: any) => ({
+      data: { subscription: { unsubscribe: () => {} } },
+    }),
     signUp: async () => ({ data: null, error: { message: 'Use authStore.signUp()' } }),
     signInWithPassword: async () => ({ data: null, error: { message: 'Use authStore.signIn()' } }),
     signOut: async () => ({ error: null }),
     resetPasswordForEmail: async () => ({ error: null }),
   },
 
-  // Realtime shim — polling replaces websocket subscriptions
-  channel: (name: string) => ({
-    on: (_type: string, _opts: any, _cb: any) => ({
-      subscribe: () => null,
-    }),
+  channel: (_name: string) => ({
+    on: (_type: string, _opts: any, _cb: any) => ({ subscribe: () => null }),
     subscribe: () => null,
   }),
   removeChannel: (_channel: any) => {},

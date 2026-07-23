@@ -64,7 +64,8 @@ const statusConfig = {
 
 export default function ApplicationDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [application, setApplication] = useState<ApplicationDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -78,33 +79,8 @@ export default function ApplicationDetailScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('applications')
-      .select(`
-        id,
-        status,
-        match_score,
-        cover_letter,
-        created_at,
-        updated_at,
-        job:jobs(
-          id,
-          title,
-          description,
-          employment_type,
-          city,
-          country,
-          is_remote,
-          salary_min,
-          salary_max,
-          salary_currency,
-          deadline,
-          employer:employers(
-            company_name,
-            company_logo_url,
-            industry
-          )
-        )
-      `)
-      .eq('id', id)
+      .select('*')
+      .eq('id', id!)
       .single();
 
     if (error) {
@@ -130,7 +106,7 @@ export default function ApplicationDetailScreen() {
             const { error } = await supabase
               .from('applications')
               .update({ status: 'withdrawn' })
-              .eq('id', id);
+              .eq('id', id!);
 
             if (error) {
               Alert.alert('Error', 'Failed to withdraw application');

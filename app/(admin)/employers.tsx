@@ -114,7 +114,7 @@ export default function AdminEmployersScreen() {
     <View style={styles.employerCard}>
       <TouchableOpacity
         style={styles.employerCardContent}
-        onPress={() => router.push(`/(admin)/employers/${item.id}`)}
+        onPress={() => router.push(`/(admin)/employers/${item.id}` as any)}
       >
         <View style={styles.avatar}>
           {item.company_logo_url ? (

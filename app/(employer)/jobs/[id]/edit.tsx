@@ -54,7 +54,8 @@ const employmentTypes = [
 
 export default function EditJobScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const { employer } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -86,7 +87,7 @@ export default function EditJobScreen() {
     const { data, error } = await supabase
       .from('jobs')
       .select('*')
-      .eq('id', id)
+      .eq('id', id!)
       .single();
 
     if (error) {
@@ -136,7 +137,7 @@ export default function EditJobScreen() {
         positions_available: formData.positions_available,
         category_id: formData.category_id,
       })
-      .eq('id', id);
+      .eq('id', id!);
 
     setSaving(false);
     if (error) {
@@ -158,7 +159,7 @@ export default function EditJobScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase.from('jobs').delete().eq('id', id);
+            const { error } = await supabase.from('jobs').delete().eq('id', id!);
             if (error) {
               Alert.alert('Error', 'Failed to delete job');
             } else {

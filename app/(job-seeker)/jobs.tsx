@@ -38,7 +38,9 @@ export default function JobsScreen() {
     Array.isArray(params.search) ? params.search[0] : params.search || ''
   );
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(params.category || '');
+  const [selectedCategory, setSelectedCategory] = useState<string>(
+    Array.isArray(params.category) ? params.category[0] : (params.category as string) || ''
+  );
   const [selectedEmploymentType, setSelectedEmploymentType] = useState('');
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -53,20 +55,12 @@ export default function JobsScreen() {
   ];
 
   const fetchJobs = useCallback(async (reset = false) => {
-    if (reset) {
-      setLoading(true);
-      setPage(0);
-    }
-
+    setLoading(true);
     const currentPage = reset ? 0 : page;
 
     let query = supabase
       .from('jobs')
-      .select(`
-        *,
-        employer:employers(company_name, company_logo_url, city),
-        category:job_categories(name)
-      `)
+      .select('*')
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .range(currentPage * pageSize, (currentPage + 1) * pageSize - 1);
@@ -74,11 +68,9 @@ export default function JobsScreen() {
     if (searchQuery) {
       query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
     }
-
     if (selectedCategory) {
       query = query.eq('category_id', selectedCategory);
     }
-
     if (selectedEmploymentType) {
       query = query.eq('employment_type', selectedEmploymentType);
     }
@@ -88,32 +80,32 @@ export default function JobsScreen() {
     if (error) {
       console.error('Error fetching jobs:', error);
     } else {
-      const newJobs = data || [];
+      const newJobs = (data as any[]) || [];
       if (reset) {
         setJobs(newJobs);
+        setPage(1);
       } else {
         setJobs((prev) => [...prev, ...newJobs]);
+        setPage(currentPage + 1);
       }
       setHasMore(newJobs.length === pageSize);
-      setPage(currentPage + 1);
     }
 
     setLoading(false);
     setRefreshing(false);
-  }, [searchQuery, selectedCategory, selectedEmploymentType, page, pageSize]);
+  }, [searchQuery, selectedCategory, selectedEmploymentType, pageSize]);
 
   useEffect(() => {
     fetchJobs(true);
   }, [selectedCategory, selectedEmploymentType]);
 
   useEffect(() => {
-    const delaySearch = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (searchQuery.length >= 2 || searchQuery.length === 0) {
         fetchJobs(true);
       }
     }, 500);
-
-    return () => clearTimeout(delaySearch);
+    return () => clearTimeout(timer);
   }, [searchQuery]);
 
   const onRefresh = () => {

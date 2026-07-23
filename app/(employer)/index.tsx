@@ -57,52 +57,63 @@ export default function EmployerDashboardScreen() {
   const fetchDashboardData = async () => {
     if (!employer) return;
     setLoading(true);
+    try {
+      // Fetch active jobs
+      const { data: jobsData } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('employer_id', employer.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
 
-    // Fetch active jobs
-    const { data: jobsData } = await supabase
-      .from('jobs')
-      .select('*')
-      .eq('employer_id', employer.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
+      if (jobsData) {
+        setActiveJobs(jobsData as Job[]);
+      }
 
-    if (jobsData) {
-      setActiveJobs(jobsData);
+      const jobIds = (jobsData as any[])?.map((j) => j.id) || [];
+
+      if (jobIds.length === 0) {
+        setRecentApplications([]);
+        setStats({
+          activeJobs: (jobsData as any[])?.length || 0,
+          totalApplications: 0,
+          newApplications: 0,
+          shortlisted: 0,
+        });
+        return;
+      }
+
+      const { data: applicationsData } = await supabase
+        .from('applications')
+        .select('*')
+        .in('job_id', jobIds)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (applicationsData) {
+        setRecentApplications(applicationsData as Application[]);
+      }
+
+      const { data: appsData } = await supabase
+        .from('applications')
+        .select('status')
+        .in('job_id', jobIds);
+
+      if (appsData) {
+        const apps = appsData as any[];
+        setStats({
+          activeJobs: (jobsData as any[])?.length || 0,
+          totalApplications: apps.length,
+          newApplications: apps.filter((a) => a.status === 'pending').length,
+          shortlisted: apps.filter((a) => a.status === 'shortlisted').length,
+        });
+      }
+    } catch (err) {
+      console.error('fetchDashboardData error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    // Fetch applications with job and job seeker info
-    const { data: applicationsData } = await supabase
-      .from('applications')
-      .select(`
-        *,
-        job:jobs!applications_job_id_fkey(id, title),
-        job_seeker:job_seekers!applications_job_seeker_id_fkey(id, full_name, profile_photo_url)
-      `)
-      .in('job_id', jobsData?.map(j => j.id) || [])
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (applicationsData) {
-      setRecentApplications(applicationsData);
-    }
-
-    // Calculate stats
-    const { data: appsData } = await supabase
-      .from('applications')
-      .select('status, job_id')
-      .in('job_id', jobsData?.map(j => j.id) || []);
-
-    if (appsData) {
-      setStats({
-        activeJobs: jobsData?.length || 0,
-        totalApplications: appsData.length,
-        newApplications: appsData.filter(a => a.status === 'pending').length,
-        shortlisted: appsData.filter(a => a.status === 'shortlisted').length,
-      });
-    }
-
-    setLoading(false);
-    setRefreshing(false);
   };
 
   const onRefresh = () => {

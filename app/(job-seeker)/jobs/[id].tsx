@@ -31,7 +31,8 @@ import { useAuthStore } from '@/stores/authStore';
 
 export default function JobDetailsScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const { jobSeeker, isAuthenticated } = useAuthStore();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,16 +48,8 @@ export default function JobDetailsScreen() {
   const fetchJob = async () => {
     const { data, error } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        employer:employers(*),
-        category:job_categories(name),
-        required_skills:job_skills(
-          *,
-          skill:skills(name)
-        )
-      `)
-      .eq('id', id)
+      .select('*')
+      .eq('id', id!)
       .single();
 
     if (error) {
@@ -64,36 +57,33 @@ export default function JobDetailsScreen() {
       Alert.alert('Error', 'Failed to load job details');
       router.back();
     } else {
-      setJob(data);
-      // Increment view count
+      setJob(data as Job);
       await supabase
         .from('jobs')
-        .update({ view_count: (data.view_count || 0) + 1 })
-        .eq('id', id);
+        .update({ view_count: ((data as any).view_count || 0) + 1 })
+        .eq('id', id!);
     }
 
-    // Check if user has already applied
     if (jobSeeker) {
       const { data: appCheck } = await supabase
         .from('applications')
         .select('id')
-        .eq('job_id', id)
+        .eq('job_id', id!)
         .eq('job_seeker_id', jobSeeker.id)
         .single();
 
       if (appCheck) setHasApplied(true);
 
-      // Check if job is saved
       const { data: savedCheck } = await supabase
         .from('saved_jobs')
         .select('id')
-        .eq('job_id', id)
+        .eq('job_id', id!)
         .eq('job_seeker_id', jobSeeker.id)
         .single();
 
       if (savedCheck) {
         setIsSaved(true);
-        setSavedJobId(savedCheck.id);
+        setSavedJobId((savedCheck as any).id);
       }
     }
 
@@ -104,7 +94,7 @@ export default function JobDetailsScreen() {
     if (!jobSeeker) {
       Alert.alert('Login Required', 'Please login to save jobs', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Login', onPress: () => router.push('/(auth)') },
+        { text: 'Login', onPress: () => router.replace('/(auth)/login') },
       ]);
       return;
     }
@@ -119,13 +109,13 @@ export default function JobDetailsScreen() {
     } else {
       // Add to saved
       const { data, error } = await supabase.from('saved_jobs').insert({
-        job_id: id,
+        job_id: id!,
         job_seeker_id: jobSeeker.id,
-      }).select('id').single();
+      });
 
       if (!error && data) {
         setIsSaved(true);
-        setSavedJobId(data.id);
+        setSavedJobId((data as any).id);
       }
     }
   };
@@ -134,14 +124,14 @@ export default function JobDetailsScreen() {
     if (!isAuthenticated || !jobSeeker) {
       Alert.alert('Login Required', 'Please login to apply for this job', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Login', onPress: () => router.push('/(auth)') },
+        { text: 'Login', onPress: () => router.replace('/(auth)/login') },
       ]);
       return;
     }
 
     setApplying(true);
     const { error } = await supabase.from('applications').insert({
-      job_id: id,
+      job_id: id!,
       job_seeker_id: jobSeeker.id,
       status: 'pending',
     });

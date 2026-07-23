@@ -37,10 +37,7 @@ export default function AdminJobsScreen() {
 
     let query = supabase
       .from('jobs')
-      .select(`
-        *,
-        employer:employers(company_name, company_logo_url)
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (selectedStatus !== 'all') {
@@ -86,7 +83,7 @@ export default function AdminJobsScreen() {
   const renderJob = ({ item }: { item: Job & { employer?: any } }) => (
     <TouchableOpacity
       style={styles.jobCard}
-      onPress={() => router.push(`/(admin)/jobs/${item.id}`)}
+      onPress={() => router.push(`/(admin)/jobs/${item.id}` as any)}
     >
       <View style={styles.jobCardContent}>
         <View style={styles.jobIcon}>

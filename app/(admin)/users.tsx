@@ -39,10 +39,7 @@ export default function AdminUsersScreen() {
 
     let query = supabase
       .from('users')
-      .select(`
-        *,
-        job_seeker:job_seekers(full_name, profile_photo_url, city)
-      `)
+      .select('*')
       .eq('role', 'job_seeker')
       .order('created_at', { ascending: false });
 
@@ -88,7 +85,7 @@ export default function AdminUsersScreen() {
   const renderUser = ({ item }: { item: User & { job_seeker?: any } }) => (
     <TouchableOpacity
       style={styles.userCard}
-      onPress={() => router.push(`/(admin)/users/${item.id}`)}
+      onPress={() => router.push(`/(admin)/users/${item.id}` as any)}
     >
       <View style={styles.userCardContent}>
         <View style={styles.avatar}>

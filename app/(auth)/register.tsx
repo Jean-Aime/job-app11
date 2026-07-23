@@ -52,18 +52,12 @@ export default function RegisterScreen() {
   });
 
   const onSubmit = async (data: RegisterFormData) => {
-    const { error } = await signUp(data.email, data.password, role);
+    const { error } = await signUp(data.email, data.password, role, data.fullName);
 
     if (error) {
       Alert.alert('Registration Failed', error.message || 'An error occurred. Please try again.');
-    } else {
-      // Redirect based on role
-      if (isEmployer) {
-        router.replace('/(employer)');
-      } else {
-        router.replace('/(job-seeker)');
-      }
     }
+    // Route guard in _layout.tsx handles redirect based on role
   };
 
   return (

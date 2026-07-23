@@ -58,29 +58,21 @@ export default function JobSeekerHomeScreen() {
       // Fetch recent jobs
       const { data: jobsData } = await supabase
         .from('jobs')
-        .select(`
-          *,
-          employer:employers(company_name, company_logo_url),
-          category:job_categories(name)
-        `)
+        .select('*')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (jobsData) setRecentJobs(jobsData);
+      if (jobsData) setRecentJobs(jobsData as Job[]);
 
-      // Fetch recommended jobs (random for now)
+      // Fetch recommended jobs
       const { data: recommendedData } = await supabase
         .from('jobs')
-        .select(`
-          *,
-          employer:employers(company_name, company_logo_url),
-          category:job_categories(name)
-        `)
+        .select('*')
         .eq('status', 'active')
         .limit(5);
 
-      if (recommendedData) setRecommendedJobs(recommendedData);
+      if (recommendedData) setRecommendedJobs(recommendedData as Job[]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {

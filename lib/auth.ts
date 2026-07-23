@@ -1,9 +1,8 @@
 /**
  * Custom JWT Auth for Neon
- * Replaces @supabase/supabase-js auth
+ * Works on both Web and React Native (uses Web Crypto API)
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
 import { queryOne, execute } from './db';
 import { User } from '@/types/database';
 
@@ -18,34 +17,35 @@ export interface Session {
   expiresAt: number;
 }
 
-// ─── Simple JWT (HS256) without native crypto ──────────────────────────────
+// ─── Web Crypto helpers (work on web + React Native 0.71+) ────────────────────
+
+async function sha256Hex(data: string): Promise<string> {
+  const encoded = new TextEncoder().encode(data);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function sha256Base64url(data: string): Promise<string> {
+  const encoded = new TextEncoder().encode(data);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
 
 function base64urlEncode(str: string): string {
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 function base64urlDecode(str: string): string {
   str = str.replace(/-/g, '+').replace(/_/g, '/');
   while (str.length % 4) str += '=';
-  return atob(str);
+  return decodeURIComponent(escape(atob(str)));
 }
 
-async function hmacSHA256(message: string, secret: string): Promise<string> {
-  // Use expo-crypto for HMAC
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(message);
-
-  // We'll use a simple fallback since expo-crypto doesn't expose HMAC directly
-  // Instead we create a deterministic hash combining message + secret
-  const combined = message + ':' + secret;
-  const digest = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    combined,
-    { encoding: Crypto.CryptoEncoding.BASE64 }
-  );
-  return digest.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
+// ─── JWT ─────────────────────────────────────────────────────────────────────
 
 export async function createJWT(payload: object, expiresInHours = 24 * 7): Promise<string> {
   const header = base64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
@@ -53,7 +53,7 @@ export async function createJWT(payload: object, expiresInHours = 24 * 7): Promi
   const fullPayload = base64urlEncode(
     JSON.stringify({ ...payload, iat: now, exp: now + expiresInHours * 3600 })
   );
-  const signature = await hmacSHA256(`${header}.${fullPayload}`, JWT_SECRET);
+  const signature = await sha256Base64url(`${header}.${fullPayload}:${JWT_SECRET}`);
   return `${header}.${fullPayload}.${signature}`;
 }
 
@@ -61,15 +61,11 @@ export async function verifyJWT(token: string): Promise<any | null> {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-
     const [header, payload, signature] = parts;
-    const expectedSig = await hmacSHA256(`${header}.${payload}`, JWT_SECRET);
-
+    const expectedSig = await sha256Base64url(`${header}.${payload}:${JWT_SECRET}`);
     if (signature !== expectedSig) return null;
-
     const decoded = JSON.parse(base64urlDecode(payload));
     if (decoded.exp < Math.floor(Date.now() / 1000)) return null;
-
     return decoded;
   } catch {
     return null;
@@ -79,18 +75,8 @@ export async function verifyJWT(token: string): Promise<any | null> {
 // ─── Password Hashing ────────────────────────────────────────────────────────
 
 export async function hashPassword(password: string): Promise<string> {
-  // SHA-256 hash with a salt derived from the password itself
-  // For production, use a proper bcrypt implementation
-  const salt = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    password + 'joblink_salt_v1',
-    { encoding: Crypto.CryptoEncoding.HEX }
-  );
-  const hash = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    password + salt,
-    { encoding: Crypto.CryptoEncoding.HEX }
-  );
+  const salt = await sha256Hex(password + 'joblink_salt_v1');
+  const hash = await sha256Hex(password + salt);
   return `${salt}:${hash}`;
 }
 
@@ -98,11 +84,7 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   try {
     const [salt, hash] = storedHash.split(':');
     if (!salt || !hash) return false;
-    const computed = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      password + salt,
-      { encoding: Crypto.CryptoEncoding.HEX }
-    );
+    const computed = await sha256Hex(password + salt);
     return computed === hash;
   } catch {
     return false;
@@ -140,12 +122,13 @@ export async function clearSession(): Promise<void> {
 export async function signUp(
   email: string,
   password: string,
-  role: 'job_seeker' | 'employer'
+  role: 'job_seeker' | 'employer',
+  fullName?: string
 ): Promise<{ user: User | null; session: Session | null; error: string | null }> {
   try {
     // Check if email already exists
     const existing = await queryOne<{ id: string }>`
-      SELECT id FROM users WHERE email = ${email.toLowerCase().trim()}
+      SELECT id FROM jl_users WHERE email = ${email.toLowerCase().trim()}
     `;
     if (existing) {
       return { user: null, session: null, error: 'Email already registered' };
@@ -153,29 +136,30 @@ export async function signUp(
 
     const passwordHash = await hashPassword(password);
     const userId = crypto.randomUUID();
+    const name = fullName?.trim() || '';
 
     // Insert user
     await execute`
-      INSERT INTO users (id, email, password_hash, role, is_verified, verification_status, is_active)
+      INSERT INTO jl_users (id, email, password_hash, role, is_verified, verification_status, is_active)
       VALUES (${userId}, ${email.toLowerCase().trim()}, ${passwordHash}, ${role}, false, 'pending', true)
     `;
 
     // Create role profile
     if (role === 'job_seeker') {
       await execute`
-        INSERT INTO job_seekers (user_id, full_name, years_of_experience, availability, profile_completion_score)
-        VALUES (${userId}, '', 0, 'immediately', 0)
+        INSERT INTO jl_job_seekers (user_id, full_name, years_of_experience, availability, profile_completion_score)
+        VALUES (${userId}, ${name}, 0, 'immediately', 0)
       `;
     } else {
       await execute`
-        INSERT INTO employers (user_id, company_name, verification_status, is_verified)
-        VALUES (${userId}, '', 'pending', false)
+        INSERT INTO jl_employers (user_id, company_name, verification_status, is_verified)
+        VALUES (${userId}, ${name}, 'pending', false)
       `;
     }
 
     const user = await queryOne<User>`
       SELECT id, email, phone, role, is_verified, verification_status, is_active, created_at, updated_at
-      FROM users WHERE id = ${userId}
+      FROM jl_users WHERE id = ${userId}
     `;
 
     if (!user) return { user: null, session: null, error: 'Failed to create user' };
@@ -200,7 +184,7 @@ export async function signIn(
     const row = await queryOne<User & { password_hash: string }>`
       SELECT id, email, phone, role, is_verified, verification_status, is_active,
              created_at, updated_at, password_hash
-      FROM users
+      FROM jl_users
       WHERE email = ${email.toLowerCase().trim()} AND is_active = true
     `;
 
@@ -236,7 +220,7 @@ export async function resetPassword(email: string): Promise<{ error: string | nu
   // For now we just confirm the email exists and return success.
   // In production, integrate SendGrid / Resend.
   const user = await queryOne<{ id: string }>`
-    SELECT id FROM users WHERE email = ${email.toLowerCase().trim()}
+    SELECT id FROM jl_users WHERE email = ${email.toLowerCase().trim()}
   `;
   if (!user) return { error: null }; // Don't reveal if email exists
   return { error: null };
@@ -248,7 +232,7 @@ export async function getCurrentUser(): Promise<User | null> {
 
   const user = await queryOne<User>`
     SELECT id, email, phone, role, is_verified, verification_status, is_active, created_at, updated_at
-    FROM users WHERE id = ${session.userId} AND is_active = true
+    FROM jl_users WHERE id = ${session.userId} AND is_active = true
   `;
   return user;
 }

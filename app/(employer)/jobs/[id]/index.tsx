@@ -63,7 +63,8 @@ interface JobDetails {
 
 export default function EmployerJobDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [job, setJob] = useState<JobDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -77,24 +78,8 @@ export default function EmployerJobDetailScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        category:job_categories(name),
-        applications(
-          id,
-          status,
-          match_score,
-          created_at,
-          job_seeker:job_seekers(
-            id,
-            full_name,
-            profile_photo_url,
-            current_occupation,
-            city
-          )
-        )
-      `)
-      .eq('id', id)
+      .select('*')
+      .eq('id', id!)
       .single();
 
     if (error) {
@@ -118,7 +103,7 @@ export default function EmployerJobDetailScreen() {
     if (error) {
       Alert.alert('Error', 'Failed to update job status');
     } else {
-      setJob({ ...job, status: newStatus });
+      setJob({ ...job, status: newStatus, applications: job.applications || [] });
     }
   };
 
@@ -132,7 +117,7 @@ export default function EmployerJobDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase.from('jobs').delete().eq('id', id);
+            const { error } = await supabase.from('jobs').delete().eq('id', id!);
             if (error) {
               Alert.alert('Error', 'Failed to delete job');
             } else {

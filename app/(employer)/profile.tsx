@@ -111,7 +111,7 @@ export default function EmployerProfileScreen() {
         style: 'destructive',
         onPress: async () => {
           await signOut();
-          router.replace('/(auth)');
+          router.replace('/(auth)/login');
         },
       },
     ]);
@@ -160,7 +160,7 @@ export default function EmployerProfileScreen() {
           <Text style={styles.headerTitle}>Company Profile</Text>
           <TouchableOpacity
             style={styles.settingsButton}
-            onPress={() => router.push('/(employer)/profile/settings')}
+            onPress={() => Alert.alert('Settings', 'Settings coming soon')}
           >
             <Settings color="#64748B" size={24} />
           </TouchableOpacity>

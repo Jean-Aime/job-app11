@@ -57,15 +57,18 @@ export default function CandidatesScreen() {
       .select('id')
       .eq('employer_id', employer.id);
 
-    const jobIds = jobs?.map(j => j.id) || [];
+    const jobIds = (jobs as any[])?.map((j: any) => j.id) || [];
+
+    if (jobIds.length === 0) {
+      setApplications([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
     let query = supabase
       .from('applications')
-      .select(`
-        *,
-        job:jobs(id, title),
-        job_seeker:job_seekers(id, full_name, profile_photo_url, current_occupation, years_of_experience, city)
-      `)
+      .select('*')
       .in('job_id', jobIds)
       .order('created_at', { ascending: false });
 
@@ -109,14 +112,14 @@ export default function CandidatesScreen() {
     { value: 'rejected', label: 'Rejected' },
   ];
 
-  const renderApplication = ({ item }: { item: Application & any }) => {
+  const renderApplication = ({ item }: { item: any }) => {
     const status = statusConfig[item.status as keyof typeof statusConfig] || statusConfig.pending;
     const StatusIcon = status.icon;
 
     return (
       <TouchableOpacity
         style={styles.applicationCard}
-        onPress={() => router.push(`/(employer)/candidates/${item.id}`)}
+        onPress={() => router.push(`/(employer)/candidates/${item.id}` as any)}
       >
         <View style={styles.cardHeader}>
           <View style={styles.avatar}>
@@ -149,7 +152,7 @@ export default function CandidatesScreen() {
             <StatusIcon color={status.color} size={14} />
             <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
           </View>
-          <TouchableOpacity onPress={() => router.push(`/(employer)/candidates/${item.id}`)}>
+          <TouchableOpacity onPress={() => router.push(`/(employer)/candidates/${item.id}` as any)}>
             <ChevronRight color="#94A3B8" size={20} />
           </TouchableOpacity>
         </View>

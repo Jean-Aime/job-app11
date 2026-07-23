@@ -58,7 +58,8 @@ interface ApplicantDetails {
 
 export default function CandidateDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [application, setApplication] = useState<ApplicantDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -73,30 +74,8 @@ export default function CandidateDetailScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('applications')
-      .select(`
-        id,
-        status,
-        cover_letter,
-        match_score,
-        skills_match,
-        location_match,
-        experience_match,
-        created_at,
-        job:jobs(id, title),
-        job_seeker:job_seekers(
-          id,
-          full_name,
-          profile_photo_url,
-          bio,
-          city,
-          country,
-          current_occupation,
-          years_of_experience,
-          phone_number,
-          availability
-        )
-      `)
-      .eq('id', id)
+      .select('*')
+      .eq('id', id!)
       .single();
 
     if (error) {
